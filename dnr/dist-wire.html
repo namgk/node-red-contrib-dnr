@@ -15,7 +15,7 @@
 -->
 
 <script type="text/x-red" data-template-name="dnr">
-    <div class="form-tips"><p>This node is a wire node to connect to a node hosted on another device.</p>
+    <p>This node is a wire node to a node hosted on another device.  It should never appear in the UI, but if it does let me know!</p>
 </script>
 
 <script type="text/x-red" data-help-name="dnr">
@@ -24,48 +24,32 @@
 
 <script type="text/javascript">
     RED.nodes.registerType('dnr',{
-        category: 'distributed nodered',
+        category: 'hidden',
         defaults: {
+          input: {value: ''},
+          output: {value: ''},
+          gateway: {type:"dnr-gateway",required:true},
         },
         color:"#d8bfd8",
         inputs:1,
         outputs:1,
-        icon: "bridge.png",
         label: function() {
-            return "DNRNode";
+            return "Distributed NR";
         },
         labelStyle: function() {
             return this.name?"node_label_italic":"";
         }
     });
 </script>
-<!-- 
-<script type="text/x-red" data-template-name="wire out">
-    <div class="form-tips"><p>This node is a wire node to connect to a node hosted on another device.</p>
-</script>
 
-<script type="text/x-red" data-help-name="wire out">
-    <p>This node is a wire node to a node hosted on another device.  It should never appear in the UI, but if it does let me know!</p>
-</script>
 
 <script type="text/javascript">
-    RED.nodes.registerType('wire out',{
-        category: 'output',
-        defaults: {
-        },
-        color:"#d8bfd8",
-        inputs:1,
-        outputs:0,
-        icon: "bridge.png",
-        align: "right",
-        label: function() {
-            return "wire out";
-        },
-        labelStyle: function() {
-            return this.name?"node_label_italic":"";
-        }
-    });
+  RED.nodes.registerType('dnr-gateway',{
+    category: 'config',
+    defaults: {
+        config: {value:{}}
+    },
+  });
 </script>
- -->
 
 

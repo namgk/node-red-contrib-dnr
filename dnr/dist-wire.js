@@ -15,7 +15,7 @@
  **/
 
 var util = require("util");
-var mqttPool = require("./mqttConnectionPool");
+var Broker = require('./broker');
 
 function generateId() {
     return (1+Math.random()*4294967295).toString(16);
@@ -23,166 +23,60 @@ function generateId() {
 
 module.exports = function(RED) {
     "use strict";
-    // we hard code the broker used for device distribution.  Could move this to settings
-    
-    var MQTT_PREFIX = "dnr/";
-    var MQTT_HOST = "test.mosquitto.org";
-    var MQTT_PORT = "1883";
-    var MQTT_CLIENTID = generateId();
-    var MQTT_USERNAME = "";
-    var MQTT_PASSWORD = "";
-
-    var MQTT_BROKER_CONFIG = {
-            "broker":"test.mosquitto.org",
-            "port":1883,
-            "clientid":"sdf",
-            "username":"",
-            "password":""
-        };
-
-    var connectionPool = mqttPool;
 
     function DNRNode(n){
         RED.nodes.createNode(this,n);
+        var node = this;
 
-        var me = this;
-
-        me.client = connectionPool.get(
-            MQTT_HOST, 
-            MQTT_PORT, 
-            n.id, 
-            MQTT_USERNAME, 
-            MQTT_PASSWORD);
-
-        //TODO: find a proper way to handle node status
-        me.client.connect();
+        node.gateway = RED.nodes.getNode(n.auth);
+        node.input = n.input;
+        node.output = n.output;
 
         util.log('[info] [dnr] DNRNode created for node ' + n.id + ' (' + n.type + ')');
 
-        // Listen to: MQTT_PREFIX/n.id-outwire
-        var outWires = n.wires;
-        for (var i = 0; i< outWires.length; i++){
-            var brokerTopic = MQTT_PREFIX + n.id + '-' + outWires[i];
-            util.log('[info] [dnr] DNRNode subscribing to: ' + brokerTopic);
-            me.client.subscribe(brokerTopic,
-                2,
-                function(topic,payload,qos,retain) {
-                    var msg = JSON.parse(payload);
-                    msg._dnr = n.id;
-                    util.log('[info] [dnr] DNRNode got from broker: \n' + payload);
-                    me.send(msg);
-                }
-           );
+        // to get data from external device
+        if (node.input){
+            node.gateway.register(n.id, node.input, function(data){
+                if (data)
+                    node.send(data.payload ? data : {payload:data});
+            });
         }
 
-        // Publish to MQTT_PREFIX/msg_origin-n.id
-        me.on("input", function(msg){
-            if (!msg)
-                return;
-
-            if (!msg._origin){
-                util.log('[info] [dnr] CRITICAL DNR ERROR: cannot determine topic for publishing msg to broker');
-                util.log('[info] [dnr] msg dropped!');
-                return;
-            }
-
-            // if the sender of this msg is a DNRNode, ignore to avoid pub/sub loop!
-            if (msg._dnr === msg._origin)
-                return;
-
-            var dnrMsg = {
-                payload: JSON.stringify(msg),
-                topic: MQTT_PREFIX + msg._origin + '-' + n.id
-            };
-
-            util.log('[info] [dnr] DNRNode publishing to: ' + dnrMsg.topic);
-            me.client.publish(dnrMsg);
-        })
-
-        me.on('close', function() {
-            if (me.client) {
-                me.client.disconnect();
-            }
-        });
+        // to send data out, it doesn't make sense if there isn't output but still 
+        // receive input, for what?
+        if (node.output){
+            node.on('input', function(msg){
+                if (msg)
+                    node.gateway.send(msg, node.output);
+            })
+        }
     }
 
     RED.nodes.registerType("dnr",DNRNode);
 
-    function WireInNode(n) {
+    function DnrGatewayNode(n) {
         RED.nodes.createNode(this,n);
-
-        this.topic = MQTT_PREFIX+n.topic;  // wire/{id}-{output}-{id}
-        this.broker = MQTT_BROKER_CONFIG.broker;
-        this.brokerConfig = MQTT_BROKER_CONFIG;
-        util.log('WireInNode created. topic:'+this.topic);
-
-        if (this.brokerConfig) {
-            this.status({fill:"red",shape:"ring",text:"disconnected"});
-            this.client = connectionPool.get(this.brokerConfig.broker,this.brokerConfig.port,RED.settings.deviceId+'wirein',this.brokerConfig.username,this.brokerConfig.password);
-            var node = this;
-            this.client.subscribe(this.topic,2,function(topic,payload,qos,retain) {
-                    console.log('WIREIN NODE ' + node.id + ' RECEIVED ' + payload);
-                    var msg = {topic:topic,payload:''+payload,qos:qos,retain:retain};
-                    if ((node.brokerConfig.broker == "localhost")||(node.brokerConfig.broker == "127.0.0.1")) {
-                        msg._topic = topic;
-                    }
-                    node.send(msg);
-            });
-            this.client.on("connectionlost",function() {
-                node.status({fill:"red",shape:"ring",text:"disconnected"});
-            });
-            this.client.on("connect",function() {
-                node.status({fill:"green",shape:"dot",text:"connected"});
-            });
-            this.client.connect();
-        } else {
-            this.error("missing broker configuration");
-        }
-        this.on('close', function() {
-            if (this.client) {
-                this.client.disconnect();
-            }
-        });
+        this.broker = new Broker(n.config)
+        this.routing = {};
     }
-    RED.nodes.registerType("wire in",WireInNode);
 
-    function WireOutNode(n) {
-        RED.nodes.createNode(this,n);
-
-        this.topic = MQTT_PREFIX+n.topic;  // wire/{id}
-        this.broker = MQTT_BROKER_CONFIG.broker;
-        this.brokerConfig = MQTT_BROKER_CONFIG;
-        util.log('WireOutNode created. topic:'+this.topic);
-
-        if (this.brokerConfig) {
-            this.status({fill:"red",shape:"ring",text:"disconnected"},true);
-            this.client = connectionPool.get(this.brokerConfig.broker,this.brokerConfig.port,RED.settings.deviceId+'wireout',this.brokerConfig.username,this.brokerConfig.password);
-            var node = this;
-            this.on("input",function(msg) {
-                console.log('WIREOUT NODE ' + node.id + ' RECEIVED ' + msg);
-                if (msg != null) {
-                    if (node.topic) {
-                        msg.topic = node.topic;
-                    }
-                    this.client.publish(msg);
+    DnrGatewayNode.prototype.register = function(nodeId, topic, cb) {
+        if (this.routing[topic]){
+            this.routing[topic][nodeId] = cb
+        } else {
+            this.routing[topic] = {nodeId: cb}
+            var routingTable = this.routing[topic]
+            this.broker.subscribe(topic, function(data){
+                for (var nodeId in routingTable){
+                    routingTable[nodeId](data)
                 }
-            });
-            this.client.on("connectionlost",function() {
-                node.status({fill:"red",shape:"ring",text:"disconnected"});
-            });
-            this.client.on("connect",function() {
-                node.status({fill:"green",shape:"dot",text:"connected"});
-            });
-            this.client.connect();
-        } else {
-            this.error("missing broker configuration");
+            })
         }
-        this.on('close', function() {
-            if (this.client) {
-                this.client.disconnect();
-            }
-        });
-    }
-    RED.nodes.registerType("wire out",WireOutNode);
+    };
 
+    DnrGatewayNode.prototype.send = function(msg, dest) {
+        this.broker.send(msg, dest)
+    };
+
+    RED.nodes.registerType("dnr-gateway", DnrGatewayNode, {});
 }
