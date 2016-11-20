@@ -1,0 +1,419 @@
+[
+  {
+    "id": "2112e230.2aefde",
+    "label": "Flow 2",
+    "type": "tab"
+  },
+  {
+    "func": "return msg;",
+    "id": "e3053a85.7b23d8",
+    "name": "DB",
+    "noerr": 0,
+    "outputs": 1,
+    "type": "function",
+    "wires": [
+      [
+        "cf5c0b34.4beec8"
+      ]
+    ],
+    "x": 452.5,
+    "y": 278,
+    "z": "2112e230.2aefde"
+  },
+  {
+    "active": false,
+    "complete": "true",
+    "console": "false",
+    "id": "955e5c3b.619d6",
+    "name": "Notify",
+    "type": "debug",
+    "wires": [],
+    "x": 773.5,
+    "y": 271,
+    "z": "2112e230.2aefde"
+  },
+  {
+    "func": "msg.payload={dev: 'car1'}\nmsg.payload.plate='1P'\n\nreturn msg;",
+    "id": "eebc871f.174508",
+    "name": "Cam",
+    "noerr": 0,
+    "outputs": 1,
+    "type": "function",
+    "wires": [
+      [
+        "ef9c54cb.5e5158"
+      ]
+    ],
+    "x": 123.5,
+    "y": 159,
+    "z": "2112e230.2aefde"
+  },
+  {
+    "func": "msg.payload.dev='car1'\nmsg.payload.location='test'\nreturn msg;",
+    "id": "3e2a64c9.0ce7cc",
+    "name": "Loc",
+    "noerr": 0,
+    "outputs": 1,
+    "type": "function",
+    "wires": [
+      [
+        "6748b012.f23e6"
+      ]
+    ],
+    "x": 380,
+    "y": 45,
+    "z": "2112e230.2aefde"
+  },
+  {
+    "func": "var dev = msg.payload.dev;\nvar plate = msg.payload.plate;\nif (dev.split('car')[1] !== plate.split('P')[0]){\n  node.error('mismatch');\n}",
+    "id": "c2f7992c.8a7b08",
+    "name": "Test",
+    "noerr": 0,
+    "outputs": "0",
+    "type": "function",
+    "wires": [],
+    "x": 767.5,
+    "y": 120,
+    "z": "2112e230.2aefde"
+  },
+  {
+    "crontab": "",
+    "id": "1dba123a.2d893e",
+    "name": "tick",
+    "once": false,
+    "payload": "{}",
+    "payloadType": "json",
+    "repeat": "1",
+    "topic": "",
+    "type": "inject",
+    "wires": [
+      [
+        "1c4a83d4.b7755c",
+        "b22731b4.066b6"
+      ]
+    ],
+    "x": 153.5,
+    "y": 45,
+    "z": "2112e230.2aefde"
+  },
+  {
+    "func": "\nreturn msg;",
+    "id": "8d42976d.6d2b58",
+    "name": "Fog",
+    "noerr": 0,
+    "outputs": 1,
+    "type": "function",
+    "wires": [
+      [
+        "6a34f737.568ea8"
+      ]
+    ],
+    "x": 278,
+    "y": 185,
+    "z": "2112e230.2aefde"
+  },
+  {
+    "id": "59426fba.c4bc2",
+    "info": "",
+    "name": "loc.dev === cam.dev",
+    "type": "comment",
+    "wires": [],
+    "x": 841.5,
+    "y": 184,
+    "z": "2112e230.2aefde"
+  },
+  {
+    "constraints": {
+      "In Vancouver": {
+        "fill": "#f7dbe4",
+        "geoloc": "Vancouver, BC",
+        "id": "In Vancouver",
+        "text": "In Vancouver"
+      }
+    },
+    "func": "var locQueue = context.get('loc')||{};\nvar plateQueue = context.get('plate')||{};\n\nif (msg.payload.location){\n  // push msg to locQueue\n  if (!locQueue[msg.payload.dev]){\n    locQueue[msg.payload.dev] = [msg.payload]\n  } else {\n    locQueue[msg.payload.dev].push(msg.payload)\n  }\n  context.set('loc', locQueue);\n}\n\nif (msg.payload.plate){\n  // push msg to plateQueue\n  if (!plateQueue[msg.payload.dev]){\n    plateQueue[msg.payload.dev] = [msg.payload]\n  } else {\n    plateQueue[msg.payload.dev].push(msg.payload)\n  }\n  context.set('plate', plateQueue);\n}\n\n// merge 2 queue fifo by dev\nvar merged = [];\n\nfor (var dev in locQueue){\n  var devLocs = locQueue[dev];\n  var devPlates = plateQueue[dev];\n  \n  if (!devLocs || !devPlates){\n    continue;\n  }\n  \n  if (devLocs.length === 0 || devPlates.length === 0){\n    continue;\n  }\n\n  while (loc = locQueue[dev].shift()){\n    var plate = plateQueue[dev].shift();\n    if (!plate){\n      break;\n    }\n    merged.push({payload:{\n      dev: dev,\n      location: loc.location,\n      plate: plate.plate\n    }}); \n  }\n  \n}\nif (merged.length){\n  return [merged];\n}",
+    "id": "821b5611.89c978",
+    "name": "merge by Loc.dev === Cam.dev",
+    "noerr": 0,
+    "outputs": 1,
+    "type": "function",
+    "wires": [
+      [
+        "d089128.738cff",
+        "2e21e7de.b04368"
+      ]
+    ],
+    "x": 571,
+    "y": 179,
+    "z": "2112e230.2aefde"
+  },
+  {
+    "gateway": "4abd72f6.f5889c",
+    "id": "cf5c0b34.4beec8",
+    "input": "e3053a85.7b23d8",
+    "type": "dnr",
+    "wires": [
+      [
+        "821b5611.89c978"
+      ]
+    ],
+    "x": 512,
+    "y": 229,
+    "z": "2112e230.2aefde"
+  },
+  {
+    "gateway": "4abd72f6.f5889c",
+    "id": "ef9c54cb.5e5158",
+    "input": "eebc871f.174508",
+    "type": "dnr",
+    "wires": [
+      [
+        "8d42976d.6d2b58"
+      ]
+    ],
+    "x": 201,
+    "y": 172,
+    "z": "2112e230.2aefde"
+  },
+  {
+    "gateway": "4abd72f6.f5889c",
+    "id": "6748b012.f23e6",
+    "input": "3e2a64c9.0ce7cc",
+    "type": "dnr",
+    "wires": [
+      [
+        "821b5611.89c978"
+      ]
+    ],
+    "x": 476,
+    "y": 112,
+    "z": "2112e230.2aefde"
+  },
+  {
+    "gateway": "4abd72f6.f5889c",
+    "id": "1c4a83d4.b7755c",
+    "input": "1dba123a.2d893e",
+    "type": "dnr",
+    "wires": [
+      [
+        "eebc871f.174508"
+      ]
+    ],
+    "x": 139,
+    "y": 102,
+    "z": "2112e230.2aefde"
+  },
+  {
+    "gateway": "4abd72f6.f5889c",
+    "id": "b22731b4.066b6",
+    "input": "1dba123a.2d893e",
+    "type": "dnr",
+    "wires": [
+      [
+        "3e2a64c9.0ce7cc"
+      ]
+    ],
+    "x": 267,
+    "y": 45,
+    "z": "2112e230.2aefde"
+  },
+  {
+    "gateway": "4abd72f6.f5889c",
+    "id": "6a34f737.568ea8",
+    "input": "8d42976d.6d2b58",
+    "type": "dnr",
+    "wires": [
+      [
+        "e3053a85.7b23d8"
+      ]
+    ],
+    "x": 365,
+    "y": 232,
+    "z": "2112e230.2aefde"
+  },
+  {
+    "gateway": "4abd72f6.f5889c",
+    "id": "d089128.738cff",
+    "input": "821b5611.89c978",
+    "type": "dnr",
+    "wires": [
+      [
+        "955e5c3b.619d6"
+      ]
+    ],
+    "x": 672,
+    "y": 225,
+    "z": "2112e230.2aefde"
+  },
+  {
+    "gateway": "4abd72f6.f5889c",
+    "id": "2e21e7de.b04368",
+    "input": "821b5611.89c978",
+    "type": "dnr",
+    "wires": [
+      [
+        "c2f7992c.8a7b08"
+      ]
+    ],
+    "x": 669,
+    "y": 150,
+    "z": "2112e230.2aefde"
+  },
+  {
+    "config": {
+      "flow": {
+        "id": "afa3b089.d9122",
+        "label": "Flow 2",
+        "nodes": [
+          {
+            "func": "return msg;",
+            "id": "e3053a85.7b23d8",
+            "name": "DB",
+            "noerr": 0,
+            "outputs": 1,
+            "type": "function",
+            "wires": [
+              [
+                "821b5611.89c978"
+              ]
+            ],
+            "x": 452.5,
+            "y": 278,
+            "z": "afa3b089.d9122"
+          },
+          {
+            "active": false,
+            "complete": "true",
+            "console": "false",
+            "id": "955e5c3b.619d6",
+            "name": "Notify",
+            "type": "debug",
+            "wires": [],
+            "x": 773.5,
+            "y": 271,
+            "z": "afa3b089.d9122"
+          },
+          {
+            "func": "msg.payload={dev: 'car1'}\nmsg.payload.plate='1P'\n\nreturn msg;",
+            "id": "eebc871f.174508",
+            "name": "Cam",
+            "noerr": 0,
+            "outputs": 1,
+            "type": "function",
+            "wires": [
+              [
+                "8d42976d.6d2b58"
+              ]
+            ],
+            "x": 123.5,
+            "y": 159,
+            "z": "afa3b089.d9122"
+          },
+          {
+            "func": "msg.payload.dev='car1'\nmsg.payload.location='test'\nreturn msg;",
+            "id": "3e2a64c9.0ce7cc",
+            "name": "Loc",
+            "noerr": 0,
+            "outputs": 1,
+            "type": "function",
+            "wires": [
+              [
+                "821b5611.89c978"
+              ]
+            ],
+            "x": 380,
+            "y": 45,
+            "z": "afa3b089.d9122"
+          },
+          {
+            "func": "var dev = msg.payload.dev;\nvar plate = msg.payload.plate;\nif (dev.split('car')[1] !== plate.split('P')[0]){\n  node.error('mismatch');\n}",
+            "id": "c2f7992c.8a7b08",
+            "name": "Test",
+            "noerr": 0,
+            "outputs": "0",
+            "type": "function",
+            "wires": [],
+            "x": 767.5,
+            "y": 120,
+            "z": "afa3b089.d9122"
+          },
+          {
+            "crontab": "",
+            "id": "1dba123a.2d893e",
+            "name": "tick",
+            "once": false,
+            "payload": "{}",
+            "payloadType": "json",
+            "repeat": "1",
+            "topic": "",
+            "type": "inject",
+            "wires": [
+              [
+                "eebc871f.174508",
+                "3e2a64c9.0ce7cc"
+              ]
+            ],
+            "x": 153.5,
+            "y": 45,
+            "z": "afa3b089.d9122"
+          },
+          {
+            "func": "\nreturn msg;",
+            "id": "8d42976d.6d2b58",
+            "name": "Fog",
+            "noerr": 0,
+            "outputs": 1,
+            "type": "function",
+            "wires": [
+              [
+                "e3053a85.7b23d8"
+              ]
+            ],
+            "x": 278,
+            "y": 185,
+            "z": "afa3b089.d9122"
+          },
+          {
+            "id": "59426fba.c4bc2",
+            "info": "",
+            "name": "loc.dev === cam.dev",
+            "type": "comment",
+            "wires": [],
+            "x": 841.5,
+            "y": 184,
+            "z": "afa3b089.d9122"
+          },
+          {
+            "constraints": {
+              "In Vancouver": {
+                "fill": "#f7dbe4",
+                "geoloc": "Vancouver, BC",
+                "id": "In Vancouver",
+                "text": "In Vancouver"
+              }
+            },
+            "func": "var locQueue = context.get('loc')||{};\nvar plateQueue = context.get('plate')||{};\n\nif (msg.payload.location){\n  // push msg to locQueue\n  if (!locQueue[msg.payload.dev]){\n    locQueue[msg.payload.dev] = [msg.payload]\n  } else {\n    locQueue[msg.payload.dev].push(msg.payload)\n  }\n  context.set('loc', locQueue);\n}\n\nif (msg.payload.plate){\n  // push msg to plateQueue\n  if (!plateQueue[msg.payload.dev]){\n    plateQueue[msg.payload.dev] = [msg.payload]\n  } else {\n    plateQueue[msg.payload.dev].push(msg.payload)\n  }\n  context.set('plate', plateQueue);\n}\n\n// merge 2 queue fifo by dev\nvar merged = [];\n\nfor (var dev in locQueue){\n  var devLocs = locQueue[dev];\n  var devPlates = plateQueue[dev];\n  \n  if (!devLocs || !devPlates){\n    continue;\n  }\n  \n  if (devLocs.length === 0 || devPlates.length === 0){\n    continue;\n  }\n\n  while (loc = locQueue[dev].shift()){\n    var plate = plateQueue[dev].shift();\n    if (!plate){\n      break;\n    }\n    merged.push({payload:{\n      dev: dev,\n      location: loc.location,\n      plate: plate.plate\n    }}); \n  }\n  \n}\nif (merged.length){\n  return [merged];\n}",
+            "id": "821b5611.89c978",
+            "name": "merge by Loc.dev === Cam.dev",
+            "noerr": 0,
+            "outputs": 1,
+            "type": "function",
+            "wires": [
+              [
+                "955e5c3b.619d6",
+                "c2f7992c.8a7b08"
+              ]
+            ],
+            "x": 571,
+            "y": 179,
+            "z": "afa3b089.d9122"
+          }
+        ]
+      },
+      "status": "not implemented!"
+    },
+    "id": "4abd72f6.f5889c",
+    "type": "dnr-gateway",
+    "z": "2112e230.2aefde"
+  }
+]

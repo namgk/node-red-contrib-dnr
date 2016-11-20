@@ -32,44 +32,36 @@ module.exports = function(RED) {
         node.input = n.input;
         node.output = n.wires[0][0];
 
-        util.log('[info] [dnr] DNRNode created for node ' + n.id + ' (' + n.type + ')');
-
-        // to get data from external device
-        if (node.input){
-            node.gateway.register(n.id, node.input, function(data){
-                if (data)
-                    node.send(data.payload ? data : {payload:data});
-            });
-        }
-
-        // to send data out, it doesn't make sense if 
-        // there isn't output but still receive input
-        if (node.output){
-            node.on('input', function(msg){
-                if (msg)
-                    node.gateway.send(msg, node.output);
-            })
-        }
+        node.gateway.register(node);
     }
 
     RED.nodes.registerType("dnr",DNRNode);
 
     function DnrGatewayNode(n) {
         RED.nodes.createNode(this,n);
-        this.broker = new Broker(n.config)
-        this.routing = {};
+        this.config = n.config
+        this.broker = new Broker(this.config)
+        this.flow = this.config.flow
+        this.nodesMap = {}
+        for (let node of this.flow.nodes){
+            if (!this.nodesMap[node.id]){
+                this.nodesMap[node.id] = node
+            }
+        }
     }
 
-    DnrGatewayNode.prototype.register = function(nodeId, topic, cb) {
-        if (this.routing[topic]){
-            this.routing[topic][nodeId] = cb
+    DnrGatewayNode.prototype.register = function(node) {
+        let dnrFor = this.nodesMap[node.wires[0][0]]
+        console.log('dnrFor '+ JSON.stringify(dnrFor))
+        if (dnrFor.constraints && Object.keys(dnrFor.constraints).length > 0){
+            // TODO
+            console.log('intercepting')
+            node.on('input', function(msg){
+                console.log('skipping node that has unmet constraints ' + node.wires[0][0])
+            })
         } else {
-            this.routing[topic] = {nodeId: cb}
-            var routingTable = this.routing[topic]
-            this.broker.subscribe(topic, function(data){
-                for (var nodeId in routingTable){
-                    routingTable[nodeId](data)
-                }
+            node.on('input', function(msg){
+                node.send(msg)
             })
         }
     };
