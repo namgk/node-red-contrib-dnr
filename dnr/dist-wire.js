@@ -28,9 +28,9 @@ module.exports = function(RED) {
         RED.nodes.createNode(this,n);
         var node = this;
 
-        node.gateway = RED.nodes.getNode(n.auth);
+        node.gateway = RED.nodes.getNode(n.gateway);
         node.input = n.input;
-        node.output = n.output;
+        node.output = n.wires[0][0];
 
         util.log('[info] [dnr] DNRNode created for node ' + n.id + ' (' + n.type + ')');
 
@@ -42,8 +42,8 @@ module.exports = function(RED) {
             });
         }
 
-        // to send data out, it doesn't make sense if there isn't output but still 
-        // receive input, for what?
+        // to send data out, it doesn't make sense if 
+        // there isn't output but still receive input
         if (node.output){
             node.on('input', function(msg){
                 if (msg)

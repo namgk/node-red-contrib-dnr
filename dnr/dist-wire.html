@@ -22,34 +22,49 @@
     <p>This node is a wire node to a node hosted on another device.  It should never appear in the UI, but if it does let me know!</p>
 </script>
 
-<script type="text/javascript">
-    RED.nodes.registerType('dnr',{
-        category: 'hidden',
-        defaults: {
-          input: {value: ''},
-          output: {value: ''},
-          gateway: {type:"dnr-gateway",required:true},
-        },
-        color:"#d8bfd8",
-        inputs:1,
-        outputs:1,
-        label: function() {
-            return "Distributed NR";
-        },
-        labelStyle: function() {
-            return this.name?"node_label_italic":"";
-        }
-    });
-</script>
-
+<style type="text/css">
+  .node_label_trojan {}
+</style>
 
 <script type="text/javascript">
+  RED.nodes.registerType('dnr',{
+      category: 'hidden',
+      defaults: {
+        input: {value: ''},
+        gateway: {type:"dnr-gateway",required:true},
+      },
+      color:"#d8bfd8",
+      inputs:1,
+      outputs:1,
+      label: function() {
+          return "";
+      },
+      labelStyle: function() {
+          return "node_label_trojan";
+      }
+  });
+
   RED.nodes.registerType('dnr-gateway',{
     category: 'config',
     defaults: {
         config: {value:{}}
     },
   });
+  
+  var changeWidth = function(){
+    var dnrLabel = $('.node_label_trojan')
+    dnrLabel.each(function(){
+      var g = $(this).parent() 
+      var rect = d3.select(g.children()[1])
+      var node = rect.data()[0]
+      node.w = 15
+      node.dirty = true
+      rect.data(node)
+      RED.view.redraw();
+    })
+  };
+  setTimeout(changeWidth, 3000)
+  RED.events.on("workspace:change", changeWidth)
 </script>
 
 
