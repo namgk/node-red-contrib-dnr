@@ -14,12 +14,8 @@
  * limitations under the License.
  **/
 
-var util = require("util");
+var utils = require("./utils");
 var Broker = require('./broker');
-
-function generateId() {
-    return (1+Math.random()*4294967295).toString(16);
-}
 
 module.exports = function(RED) {
     "use strict";
@@ -35,7 +31,6 @@ module.exports = function(RED) {
         node.gateway.register(node);
     }
 
-    RED.nodes.registerType("dnr",DNRNode);
 
     function DnrGatewayNode(n) {
         RED.nodes.createNode(this,n);
@@ -43,32 +38,33 @@ module.exports = function(RED) {
         this.broker = new Broker(this.config)
         this.flow = this.config.flow
         this.nodesMap = {}
-        for (let node of this.flow.nodes){
+        this.dnrNodesMap = {} // key: a normal node, value: the dnr node preceed it
+        for (var node of this.flow.nodes){
             if (!this.nodesMap[node.id]){
                 this.nodesMap[node.id] = node
+            }
+            if (node.type === 'dnr'){
+                this.dnrNodesMap[node.wires[0][0]] = node
             }
         }
     }
 
-    DnrGatewayNode.prototype.register = function(node) {
-        let dnrFor = this.nodesMap[node.wires[0][0]]
-        console.log('dnrFor '+ JSON.stringify(dnrFor))
-        if (dnrFor.constraints && Object.keys(dnrFor.constraints).length > 0){
-            // TODO
-            console.log('intercepting')
-            node.on('input', function(msg){
-                console.log('skipping node that has unmet constraints ' + node.wires[0][0])
-            })
-        } else {
-            node.on('input', function(msg){
-                node.send(msg)
-            })
-        }
-    };
+    DnrGatewayNode.prototype.register = function(dnrNode) {
+        let dnrFor = this.nodesMap[dnrNode.wires[0][0]]
+        dnrNode.on('input', function(msg){
+            if (utils.hasConstraints(dnrFor)){
+                // TODO:
+                console.log('skipping node that has unmet constraints ' + dnrNode.wires[0][0])
+            } else {
+                dnrNode.send(msg)
+            }
+        })
+    }
 
     DnrGatewayNode.prototype.send = function(msg, dest) {
         this.broker.send(msg, dest)
-    };
+    }
 
+    RED.nodes.registerType("dnr",DNRNode);
     RED.nodes.registerType("dnr-gateway", DnrGatewayNode, {});
 }
