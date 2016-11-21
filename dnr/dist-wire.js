@@ -15,56 +15,90 @@
  **/
 
 var utils = require("./utils");
+var context = require("./context");
 var Broker = require('./broker');
 
 module.exports = function(RED) {
-    "use strict";
+  "use strict";
 
-    function DNRNode(n){
-        RED.nodes.createNode(this,n);
-        var node = this;
+  function DNRNode(n){
+    RED.nodes.createNode(this,n);
+    var node = this;
 
-        node.gateway = RED.nodes.getNode(n.gateway);
-        node.input = n.input;
-        node.output = n.wires[0][0];
+    node.gateway = RED.nodes.getNode(n.gateway);
+    node.input = n.input;
+    node.state = context.NORMAL
 
-        node.gateway.register(node);
+    node.on('input', function(msg){
+      node.gateway.dispatch(node, msg)
+    })
+
+    node.gateway.register(node);
+  }
+
+
+  function DnrGatewayNode(n) {
+    RED.nodes.createNode(this,n);
+    this.config = n.config
+    this.broker = new Broker(this.config)
+    this.flow = this.config.flow
+    this.nodesMap = {}
+    this.dnrNodesMap = {} // key: a normal node, value: the dnr node preceed it
+    
+    for (var node of this.flow.nodes){
+      this.nodesMap[node.id] = node
     }
 
+    var gateway = this
+    setInterval(function(){
+      gateway.heartbeat.call(gateway)
+    }, 5000)
+  }
 
-    function DnrGatewayNode(n) {
-        RED.nodes.createNode(this,n);
-        this.config = n.config
-        this.broker = new Broker(this.config)
-        this.flow = this.config.flow
-        this.nodesMap = {}
-        this.dnrNodesMap = {} // key: a normal node, value: the dnr node preceed it
-        for (var node of this.flow.nodes){
-            if (!this.nodesMap[node.id]){
-                this.nodesMap[node.id] = node
-            }
-            if (node.type === 'dnr'){
-                this.dnrNodesMap[node.wires[0][0]] = node
-            }
-        }
-    }
+  DnrGatewayNode.prototype.heartbeat = function() {
+    for (var k in this.nodesMap){
+      // aNode ------ dnrNode ----- cNode
+      var cNode = this.nodesMap[k]
+      var dnrNode = this.dnrNodesMap[cNode.id]
+      var aNode = this.nodesMap[dnrNode.input]
 
-    DnrGatewayNode.prototype.register = function(dnrNode) {
-        let dnrFor = this.nodesMap[dnrNode.wires[0][0]]
-        dnrNode.on('input', function(msg){
-            if (utils.hasConstraints(dnrFor)){
-                // TODO:
-                console.log('skipping node that has unmet constraints ' + dnrNode.wires[0][0])
-            } else {
-                dnrNode.send(msg)
-            }
+      /*
+        need to decide how this dnr node should behave
+      */
+      var state = context.reason(aNode, cNode)
+      dnrNode.state = state
+
+      if (state === context.FETCH_FORWARD){
+        // fetch data from external node, aNode won't send anything!
+        var topic = dnrNode.input
+        this.broker.subscribe(dnrNode, topic, function(msg){
+          dnrNode.send(msg)
         })
+      } else {
+        this.broker.unsubscribe(dnrNode)
+      }
     }
+  }
 
-    DnrGatewayNode.prototype.send = function(msg, dest) {
-        this.broker.send(msg, dest)
+  DnrGatewayNode.prototype.register = function(dnrNode) {
+    this.dnrNodesMap[dnrNode.wires[0][0]] = dnrNode
+  }
+
+  DnrGatewayNode.prototype.dispatch = function(dnrNode, msg) {
+    switch (dnrNode.state) {
+      case context.NORMAL:
+        dnrNode.send(msg)
+        break;
+      case context.RECEIVE_REDIRECT:
+        var topic = dnrNode.input
+        this.broker.publish(dnrNode, topic, msg)
+        break;
+      default:
+        // context.DROP
+        console.log('skipping node that has unmet constraints ' + dnrNode.wires[0][0])
     }
+  }
 
-    RED.nodes.registerType("dnr",DNRNode);
-    RED.nodes.registerType("dnr-gateway", DnrGatewayNode, {});
+  RED.nodes.registerType("dnr-gateway", DnrGatewayNode, {});
+  RED.nodes.registerType("dnr", DNRNode);
 }
