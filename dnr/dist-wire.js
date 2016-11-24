@@ -60,6 +60,9 @@ module.exports = function(RED) {
       // aNode ------ dnrNode ----- cNode
       var cNode = this.nodesMap[k]
       var dnrNode = this.dnrNodesMap[cNode.id]
+      if (!dnrNode){
+        continue
+      }
       var aNode = this.nodesMap[dnrNode.input]
 
       /*
