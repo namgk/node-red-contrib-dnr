@@ -15,11 +15,12 @@
 -->
 
 <script type="text/x-red" data-template-name="dnr">
-    <p>This node is a wire node to a node hosted on another device.  It should never appear in the UI, but if it does let me know!</p>
+    <p><b>Do not use manually!!!</b></p>
 </script>
 
 <script type="text/x-red" data-help-name="dnr">
-    <p>This node is a wire node to a node hosted on another device.  It should never appear in the UI, but if it does let me know!</p>
+    <p>This node enables Distributed Node RED</p>
+    <p>It is automatically generated and should never be used directly</p>
 </script>
 
 <style type="text/css">
@@ -28,7 +29,7 @@
 
 <script type="text/javascript">
   RED.nodes.registerType('dnr',{
-      category: 'hidden',
+      category: 'dontuse',
       defaults: {
         input: {value: ''},
         gateway: {type:"dnr-gateway",required:true},

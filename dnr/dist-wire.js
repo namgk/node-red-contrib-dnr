@@ -63,20 +63,25 @@ module.exports = function(RED) {
       if (!dnrNode){
         continue
       }
-      var aNode = this.nodesMap[dnrNode.input]
+      var aNode = this.nodesMap[dnrNode.input.split('_')[0]]
 
       /*
         need to decide how this dnr node should behave
       */
       var state = context.reason(aNode, cNode)
+      if (dnrNode.state === state){
+        return
+      }
+
       dnrNode.state = state
 
       if (state === context.FETCH_FORWARD){
         // fetch data from external node, aNode won't send anything!
+        // dnrNode.input: 'nodeId_outport'
         var topic = dnrNode.input
-        this.broker.subscribe(dnrNode, topic, function(msg){
-          dnrNode.send(msg)
-        })
+        this.broker.subscribe(dnrNode.id, topic, ((dnrNode) => {return function(msg){
+          dnrNode.send(JSON.parse(msg))
+        }})(dnrNode))
       } else {
         this.broker.unsubscribe(dnrNode)
       }
@@ -94,7 +99,9 @@ module.exports = function(RED) {
         break;
       case context.RECEIVE_REDIRECT:
         var topic = dnrNode.input
-        this.broker.publish(dnrNode, topic, msg)
+        this.broker.publish(dnrNode, topic, JSON.stringify(msg))
+        break;
+      case context.FETCH_FORWARD:
         break;
       default:
         // context.DROP

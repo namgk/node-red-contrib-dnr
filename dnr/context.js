@@ -15,7 +15,7 @@
 // cDnrNode.on('input', function(){
 
 // })
-
+"use strict";
 var utils = require("./utils");
 
 function Context(){
@@ -24,9 +24,36 @@ function Context(){
   this.FETCH_FORWARD = 3
   this.RECEIVE_REDIRECT = 4
 
+  // demo
+  this.device = parseInt(process.argv[3].split('/')[3].substring(9,10))
+  // on road: device 1,2 // .node-red1
+  // on bases: device 3,4 
+  // cloud service: 5
+  // near Road Sensors: device 1, 2
 }
 
 Context.prototype.satisfying = function(constraints) {
+  // demo
+  // console.log(this.device)
+  // console.log(constraints)
+  for (var c in constraints){
+    if (c === 'link'){
+      continue
+    }
+
+    if (c === 'on road' || c === 'near Road Sensors'){
+      return this.device === 1 || this.device === 2
+    }
+
+    if (c === 'on bases'){
+      return this.device === 3 || this.device === 4
+    }
+
+    if (c === 'cloud service'){
+      return this.device === 5
+    }
+  }
+
   return false
 };
 
@@ -50,6 +77,8 @@ Context.prototype.reason = function(aNode, cNode) {
     // decide if it should drop or send
     // should not redirect because all participating devices have aNode running
     if (!this.satisfying(cNode.constraints)){
+      console.log(cNode.constraints)
+      console.log(this.device)
       return this.DROP
     } else {
       return this.NORMAL
@@ -70,6 +99,8 @@ Context.prototype.reason = function(aNode, cNode) {
   // not receiving anything from aNode
   if (utils.hasConstraints(cNode) &&
       !this.satisfying(cNode.constraints)){
+    console.log(cNode.constraints)
+    console.log(this.device)
     return this.DROP // should be another state: DO_NOTHING, but DROP would do well
   }
 

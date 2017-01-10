@@ -25,7 +25,8 @@
   },
   "node-red": {
         "nodes"     : {
-            "dnr": "dnr/dist-wire.js"
+            "dnr": "dnr/dist-wire.js",
+            "dnr-daemon": "dnr/daemon.js"
         }
     }
 }
