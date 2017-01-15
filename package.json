@@ -22,11 +22,13 @@
   },
   "homepage": "https://github.com/namgk/node-red-contrib-dnr#readme",
   "dependencies": {
+    "dnr-daemon": "^1.0.0",
+    "ws": "^1.1.1"
   },
   "node-red": {
-        "nodes"     : {
-            "dnr": "dnr/dist-wire.js",
-            "dnr-daemon": "dnr/daemon.js"
-        }
+    "nodes": {
+      "dnr": "dnr/dist-wire.js",
+      "dnr-daemon": "dnr/daemon.js"
     }
+  }
 }

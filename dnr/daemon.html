@@ -17,11 +17,11 @@
 <script type="text/x-red" data-template-name="dnr-daemon">
     <p>test dnr daemon</p>
     <div class="form-row">
-      <label for="node-input-operator"><i class="fa"></i> DNR operator</label>
-      <input type="text" id="node-input-operator" placeholder="http://localhost:1818">
+      <label for="node-input-operatorUrl"><i class="fa"></i> DNR operator</label>
+      <input type="text" id="node-input-operatorUrl" disabled="true">
     </div>
     <div class="form-row">
-      <label for="node-input-nodered"><i class="fa"></i> This Node RED</label>
+      <label for="node-input-nodered"><i class="fa"></i> Local Node RED</label>
       <input type="text" id="node-input-nodered">
     </div>
 </script>
@@ -47,22 +47,29 @@
 <script type="text/javascript">
   RED.nodes.registerType('nodered-credentials',{
     category: 'config',
-    // defaults: {
-    //     url: {value:"http://0.0.0.0:1880", required:true}
-    // },
     credentials: {
       username: {type: "text", required:true},
       password: {type: "text", required:true}
     },
     label: function() {
-      return "default";
+      return "local NodeRED";
+    },
+  });
+  RED.nodes.registerType('operator-credentials',{
+    category: 'config',
+    credentials: {
+      token: {type: "text", required:false}
+    },
+    label: function() {
+      return this.url;
     },
   });
   RED.nodes.registerType('dnr-daemon',{
       category: 'dontuse',
       defaults: {
         nodered: {type:"nodered-credentials",required:false},
-        operator: {value: 'http://localhost:1818', required:true}
+        operatorUrl: {type:"text",required:true},
+        operator: {type:"operator-credentials", required:true}
       },
       color:"#d8bfd8",
       inputs:0,

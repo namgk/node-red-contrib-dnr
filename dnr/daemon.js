@@ -16,7 +16,7 @@
 
 var Auth = require("dnr-daemon").Auth
 var FlowsAPI = require("dnr-daemon").FlowsAPI
-var Ws = require("ws");
+var WebSocket = require("ws");
 
 function getListenPath(settings) {
   var listenPath = 'http'+(settings.https?'s':'')+'://'+
@@ -36,10 +36,18 @@ module.exports = function(RED) {
   function DnrDaemonNode(n) {
     RED.nodes.createNode(this,n);
 
+    this.reconnectAttempts = 0;
+    this.active = true;
+    this.connectCountdown = 10;
+    this.ws = null
+
     var node = this;
     node.nodered = RED.nodes.getNode(n.nodered);
-    node.operator = n.operator
+    node.operator = RED.nodes.getNode(n.operator)
+    node.operatorUrl = n.operatorUrl
     node.noderedPath = getListenPath(RED.settings)
+
+    console.log(node.operator)
 
     var auth = new Auth(
       node.noderedPath, 
@@ -57,19 +65,11 @@ module.exports = function(RED) {
       })
     })
 
-    node.wsClient = new Ws(node.operator + (node.operator.slice(-1) == "/"?"":"/") + "comms")
-    node.wsClient.on('open', ()=>{
-      console.log('comms connected')
-    })
-    node.wsClient.on('message', (msg)=>{
-      console.log(msg)
-    })
-    node.wsClient.on('error', (err)=>{
-      node.warn(err)
-    })
+    node.connectWS()
 
-    // node.on("input",function(msg) {
-    // })
+    node.on("close",function() {
+      node.active = false
+    })
     
     // setInterval(function(){
     //   node.heartbeat.call(node)
@@ -77,6 +77,49 @@ module.exports = function(RED) {
   }
 
   DnrDaemonNode.prototype.heartbeat = function() {
+  }
+
+  DnrDaemonNode.prototype.connectWS = function() {
+    let node = this
+
+    let path = node.operatorUrl + 
+      (node.operatorUrl.slice(-1) == "/"?"":"/") + 
+      "dnr"
+
+    node.ws = new WebSocket(path);
+
+    node.ws.on('open', function() {
+      node.reconnectAttempts = 0;
+    })
+
+    node.ws.on('message', function(msg) {
+      console.log(msg)
+    });
+
+    node.ws.on('close', noConnection)
+
+    node.ws.on('error', noConnection)
+
+    function noConnection(e) {
+      if (!node.active){
+        return
+      }
+
+      node.ws.close()
+
+      node.reconnectAttempts++;
+
+      if (node.reconnectAttempts < 10) {
+        console.log('reconnecting to dnr operator')
+        setTimeout(()=>node.connectWS.call(node),2000);
+      } else {
+        node.connectCountdownTimer = setInterval(function() {
+          console.log('reconnecting to dnr operator after 1 minute')
+          clearInterval(node.connectCountdownTimer);
+          node.connectWS.call(node);
+        },1000*60);
+      }
+    }
   }
 
   function NodeRedCredentialsNode(n) {
@@ -89,12 +132,27 @@ module.exports = function(RED) {
     }
   }
 
+  function OperatorCredentialsNode(n) {
+    RED.nodes.createNode(this,n);
+    var node = this;
+
+    if (node.credentials) {
+      node.token = node.credentials.token;
+    }
+  }
+
   RED.nodes.registerType("dnr-daemon", DnrDaemonNode, {});
 
   RED.nodes.registerType("nodered-credentials", NodeRedCredentialsNode, {
     credentials: {
       username: {type:"text"},
       password: {type:"text"}
+    }
+  });
+
+  RED.nodes.registerType("operator-credentials", OperatorCredentialsNode, {
+    credentials: {
+      token: {type:"text"}
     }
   });
 
