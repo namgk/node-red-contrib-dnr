@@ -94,7 +94,49 @@ module.exports = function(RED) {
     })
 
     node.ws.on('message', function(msg) {
-      node.log(msg)
+      try {
+        node.log(msg)
+        msg = JSON.parse(msg)
+        if (msg.topic === 'flow_deployed'){
+          var activeFlow = msg.data.activeFlow
+          var masterFlows = msg.data.allFlows
+
+          node.log(activeFlow.id)
+          console.log(masterFlows)
+
+          // mapping between flow label and id
+          activeFlow.label = activeFlow.id
+
+          node.flowsApi.getAllFlow()
+          .then(flows=>{
+            flows = JSON.parse(flows)
+            for (var i = 0; i<flows.length; i++){
+              if (flows[i].type !== 'tab'){
+                continue
+              }
+
+              // sync local flows with master flows
+              if (masterFlows.indexOf(flows[i].label) == -1 && 
+                    flows[i].label !== 'DNR Seed'){
+                node.flowsApi.uninstallFlow(flows[i].id)
+                continue
+              }
+
+              // mapping between flow label and flow id
+              // this is to tell which local flow corresponds to 
+              // which master flow
+              if (flows[i].label === activeFlow.id){
+                return node.flowsApi.uninstallFlow(flows[i].id)
+              }
+            }
+          })
+          .then(()=>{
+            node.flowsApi.installFlow(JSON.stringify(activeFlow))
+          })
+        }
+      } catch (err){
+        node.error(err)
+      }
     });
 
     node.ws.on('close', noConnection)
