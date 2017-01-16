@@ -43,11 +43,11 @@ module.exports = function(RED) {
 
     var node = this;
     node.nodered = RED.nodes.getNode(n.nodered);
-    node.operator = RED.nodes.getNode(n.operator)
+    node.operatorToken = RED.nodes.getNode(n.operatorToken)
     node.operatorUrl = n.operatorUrl
     node.noderedPath = getListenPath(RED.settings)
 
-    console.log(node.operator)
+    node.log(node.operatorUrl)
 
     var auth = new Auth(
       node.noderedPath, 
@@ -69,6 +69,7 @@ module.exports = function(RED) {
 
     node.on("close",function() {
       node.active = false
+      node.ws.close()
     })
     
     // setInterval(function(){
@@ -93,7 +94,7 @@ module.exports = function(RED) {
     })
 
     node.ws.on('message', function(msg) {
-      console.log(msg)
+      node.log(msg)
     });
 
     node.ws.on('close', noConnection)
@@ -110,11 +111,11 @@ module.exports = function(RED) {
       node.reconnectAttempts++;
 
       if (node.reconnectAttempts < 10) {
-        console.log('reconnecting to dnr operator')
+        node.log('reconnecting to dnr operator')
         setTimeout(()=>node.connectWS.call(node),2000);
       } else {
         node.connectCountdownTimer = setInterval(function() {
-          console.log('reconnecting to dnr operator after 1 minute')
+          node.log('reconnecting to dnr operator after 1 minute')
           clearInterval(node.connectCountdownTimer);
           node.connectWS.call(node);
         },1000*60);

@@ -18,7 +18,7 @@
     <p>test dnr daemon</p>
     <div class="form-row">
       <label for="node-input-operatorUrl"><i class="fa"></i> DNR operator</label>
-      <input type="text" id="node-input-operatorUrl" disabled="true">
+      <input type="text" id="node-input-operatorUrl">
     </div>
     <div class="form-row">
       <label for="node-input-nodered"><i class="fa"></i> Local Node RED</label>
@@ -69,7 +69,7 @@
       defaults: {
         nodered: {type:"nodered-credentials",required:false},
         operatorUrl: {type:"text",required:true},
-        operator: {type:"operator-credentials", required:true}
+        operatorToken: {type:"operator-credentials", required:false}
       },
       color:"#d8bfd8",
       inputs:0,
