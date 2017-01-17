@@ -30,7 +30,9 @@ module.exports = function(RED) {
       throw "No dnr gateway configured for this flow";
     }
 
+    // node.input: "source_port"
     node.input = n.input;
+    node.linkType = n.linkType
     node.state = context.NORMAL
 
     node.on('input', function(msg){
@@ -59,6 +61,7 @@ module.exports = function(RED) {
     }, 5000)
   }
 
+  // update the state of each dnr node according to device context
   DnrGatewayNode.prototype.heartbeat = function() {
     for (var k in this.nodesMap){
       // aNode ------ dnrNode ----- cNode
@@ -105,11 +108,9 @@ module.exports = function(RED) {
         var topic = dnrNode.input
         this.broker.publish(dnrNode, topic, JSON.stringify(msg))
         break;
-      case context.FETCH_FORWARD:
-        break;
-      default:
-        // context.DROP
-        console.log('skipping node that has unmet constraints ' + dnrNode.wires[0][0])
+      // skipping DROP context here
+      // in case of FETCH_FORWARD, it won't receive 'input' event
+      //   as it gets message from external nodes via subscription
     }
   }
 
