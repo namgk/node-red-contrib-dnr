@@ -34,8 +34,6 @@ function Context(){
 
 Context.prototype.satisfying = function(constraints) {
   // demo
-  // console.log(this.device)
-  // console.log(constraints)
   for (var c in constraints){
     if (c === 'link'){
       continue
@@ -77,8 +75,6 @@ Context.prototype.reason = function(aNode, cNode) {
     // decide if it should drop or send
     // should not redirect because all participating devices have aNode running
     if (!this.satisfying(cNode.constraints)){
-      console.log(cNode.constraints)
-      console.log(this.device)
       return this.DROP
     } else {
       return this.NORMAL
@@ -99,8 +95,6 @@ Context.prototype.reason = function(aNode, cNode) {
   // not receiving anything from aNode
   if (utils.hasConstraints(cNode) &&
       !this.satisfying(cNode.constraints)){
-    console.log(cNode.constraints)
-    console.log(this.device)
     return this.DROP // should be another state: DO_NOTHING, but DROP would do well
   }
 

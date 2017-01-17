@@ -15,10 +15,12 @@
 -->
 
 <script type="text/x-red" data-template-name="dnr-daemon">
-    <p>test dnr daemon</p>
+    <p>DNR Daemon</p>
+    <p>There should be only one instance of this node throughout your local Node RED</p>
+    <p>It should be automatically generated via DNR Operator</p>
     <div class="form-row">
       <label for="node-input-operatorUrl"><i class="fa"></i> DNR operator</label>
-      <input type="text" id="node-input-operatorUrl">
+      <input type="text" id="node-input-operatorUrl" placeholder="http://<dnr-operator-url>">
     </div>
     <div class="form-row">
       <label for="node-input-nodered"><i class="fa"></i> Local Node RED</label>
@@ -27,7 +29,9 @@
 </script>
 
 <script type="text/x-red" data-help-name="dnr-daemon">
-    <p>blah dnr daemon</p>
+    <p>This node communicate with DNR Operator, 
+        it allows this device to be part of a device pool that is 
+        managed by the DNR Operator.</p>
 </script>
 <script type="text/x-red" data-help-name="nodered-credentials">
     <p>node red credentials</p>
@@ -65,7 +69,7 @@
     },
   });
   RED.nodes.registerType('dnr-daemon',{
-      category: 'dontuse',
+      category: 'Distributed NR',
       defaults: {
         nodered: {type:"nodered-credentials",required:false},
         operatorUrl: {type:"text",required:true},
@@ -79,30 +83,30 @@
       },
       labelStyle: function() {
           return "node_label_italic";
-      },
-      button: {
-        onclick: function() {
-          var node = this;
-          $.ajax({
-            url: "dnr_daemon/"+this.id,
-            type:"POST",
-            success: function(resp) {
-                RED.notify(node._("success"),"success");
-            },
-            error: function(jqXHR,textStatus,errorThrown) {
-                if (jqXHR.status == 404) {
-                    RED.notify(node._("common.notification.error",{message:node._("common.notification.errors.not-deployed")}),"error");
-                } else if (jqXHR.status == 500) {
-                    RED.notify(node._("common.notification.error",{message:node._("dnr_daemon.errors.failed")}),"error");
-                } else if (jqXHR.status == 0) {
-                    RED.notify(node._("common.notification.error",{message:node._("common.notification.errors.no-response")}),"error");
-                } else {
-                    RED.notify(node._("common.notification.error",{message:node._("common.notification.errors.unexpected",{status:jqXHR.status,message:textStatus})}),"error");
-                }
-              }
-          });
-        }
       }
+      // button: {
+      //   onclick: function() {
+      //     var node = this;
+      //     $.ajax({
+      //       url: "dnr_daemon/"+this.id,
+      //       type:"POST",
+      //       success: function(resp) {
+      //           RED.notify(node._("success"),"success");
+      //       },
+      //       error: function(jqXHR,textStatus,errorThrown) {
+      //           if (jqXHR.status == 404) {
+      //               RED.notify(node._("common.notification.error",{message:node._("common.notification.errors.not-deployed")}),"error");
+      //           } else if (jqXHR.status == 500) {
+      //               RED.notify(node._("common.notification.error",{message:node._("dnr_daemon.errors.failed")}),"error");
+      //           } else if (jqXHR.status == 0) {
+      //               RED.notify(node._("common.notification.error",{message:node._("common.notification.errors.no-response")}),"error");
+      //           } else {
+      //               RED.notify(node._("common.notification.error",{message:node._("common.notification.errors.unexpected",{status:jqXHR.status,message:textStatus})}),"error");
+      //           }
+      //         }
+      //     });
+      //   }
+      // }
   });
 </script>
 

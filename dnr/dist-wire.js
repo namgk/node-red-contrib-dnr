@@ -26,6 +26,10 @@ module.exports = function(RED) {
     var node = this;
 
     node.gateway = RED.nodes.getNode(n.gateway);
+    if (!node.gateway){
+      throw "No dnr gateway configured for this flow";
+    }
+
     node.input = n.input;
     node.state = context.NORMAL
 

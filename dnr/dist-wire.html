@@ -19,8 +19,8 @@
 </script>
 
 <script type="text/x-red" data-help-name="dnr">
-    <p>This node enables Distributed Node RED</p>
-    <p>It is automatically generated and should never be used directly</p>
+    <p>This node coordinates communication among nodes that are distributed over participating devices in a Distributed Node RED (DNRr) flow</p>
+    <p>It is automatically generated and injected into wires of a DNR flow whenever new DNR flow is available from DNR Operator. It will not be able to run directly !!!</p>
 </script>
 
 <style type="text/css">
@@ -29,7 +29,7 @@
 
 <script type="text/javascript">
   RED.nodes.registerType('dnr',{
-      category: 'dontuse',
+      category: 'Distributed NR',
       defaults: {
         input: {value: ''},
         gateway: {type:"dnr-gateway",required:true},

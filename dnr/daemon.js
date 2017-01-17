@@ -15,6 +15,7 @@
  **/
 
 var Auth = require("dnr-daemon").Auth
+var Dnr = require("dnr-daemon").Dnr
 var FlowsAPI = require("dnr-daemon").FlowsAPI
 var WebSocket = require("ws");
 
@@ -101,11 +102,9 @@ module.exports = function(RED) {
           var activeFlow = msg.data.activeFlow
           var masterFlows = msg.data.allFlows
 
-          node.log(activeFlow.id)
-          console.log(masterFlows)
-
           // mapping between flow label and id
-          activeFlow.label = activeFlow.id
+          // distinguishing between dnr flows and normal flows
+          activeFlow.label = 'dnr_' + activeFlow.id
 
           node.flowsApi.getAllFlow()
           .then(flows=>{
@@ -115,23 +114,31 @@ module.exports = function(RED) {
                 continue
               }
 
-              // sync local flows with master flows
-              if (masterFlows.indexOf(flows[i].label) == -1 && 
-                    flows[i].label !== 'DNR Seed'){
-                node.flowsApi.uninstallFlow(flows[i].id)
-                continue
-              }
+              // sync local flows with master flows: we
+              // want to remove local flows that have been deleted
+              // on master flows.
 
-              // mapping between flow label and flow id
-              // this is to tell which local flow corresponds to 
-              // which master flow
-              if (flows[i].label === activeFlow.id){
+              // TODO: seems like a node-red bug, cannot delete
+              // multiple flows concurrently!!
+              // Same thing applies to installing
+              // uncomment the following block when resolved
+
+              // if (masterFlows.indexOf(flows[i].label.replace('dnr_','')) == -1 && 
+              //     flows[i].label !== 'DNR Seed' &&
+              //     flows[i].label.indexOf('dnr_') == 0){
+              //   node.flowsApi.uninstallFlow(flows[i].id)
+              //   continue
+              // }
+
+              // to update local flow: uninstall it first and reinstall 
+              // with remote version
+              if (flows[i].label.replace('dnr_','') === activeFlow.id){
                 return node.flowsApi.uninstallFlow(flows[i].id)
               }
             }
           })
           .then(()=>{
-            node.flowsApi.installFlow(JSON.stringify(activeFlow))
+            node.flowsApi.installFlow(JSON.stringify(Dnr.dnrize(activeFlow)))
           })
         }
       } catch (err){
@@ -140,7 +147,6 @@ module.exports = function(RED) {
     });
 
     node.ws.on('close', noConnection)
-
     node.ws.on('error', noConnection)
 
     function noConnection(e) {
@@ -148,7 +154,7 @@ module.exports = function(RED) {
         return
       }
 
-      node.ws.close()
+      node.ws.close()// rest assured, this won't trigger close event!
 
       node.reconnectAttempts++;
 
