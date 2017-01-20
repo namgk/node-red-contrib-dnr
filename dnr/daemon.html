@@ -46,11 +46,18 @@
     <label for="node-config-input-password"><i class="fa"></i>Password</label>
     <input type="password" id="node-config-input-password">
   </div>
+  <div class="form-row">
+    <label for="node-config-input-deviceId"><i class="fa"></i>Device Id</label>
+    <input type="text" id="node-config-input-deviceId">
+  </div>
 </script>
 
 <script type="text/javascript">
   RED.nodes.registerType('nodered-credentials',{
     category: 'config',
+    defaults: {
+      deviceId: {type: "text", required:false}
+    },
     credentials: {
       username: {type: "text", required:true},
       password: {type: "text", required:true}

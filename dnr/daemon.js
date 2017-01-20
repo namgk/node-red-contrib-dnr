@@ -17,7 +17,11 @@
 var Auth = require("dnr-daemon").Auth
 var Dnr = require("dnr-daemon").Dnr
 var FlowsAPI = require("dnr-daemon").FlowsAPI
-var WebSocket = require("ws");
+var WebSocket = require("ws")
+var ctx = require("./context")
+var utils = require('./utils')
+
+var OPERATOR_HEARTBEAT = 5000
 
 function getListenPath(settings) {
   var listenPath = 'http'+(settings.https?'s':'')+'://'+
@@ -34,131 +38,212 @@ function getListenPath(settings) {
 module.exports = function(RED) {
   "use strict";
 
+  // there should be only one instance of this node throughout the local Node-RED
   function DnrDaemonNode(n) {
     RED.nodes.createNode(this,n);
 
-    this.reconnectAttempts = 0;
-    this.active = true;
-    this.connectCountdown = 10;
-    this.ws = null
+    var reconnectAttempts = 0
+    var active = true
+    var ws = null
+    var wsAlive = false
+    var registered = false
 
-    var node = this;
-    node.nodered = RED.nodes.getNode(n.nodered);
-    node.operatorToken = RED.nodes.getNode(n.operatorToken)
-    node.operatorUrl = n.operatorUrl
-    node.noderedPath = getListenPath(RED.settings)
+    var localNR = RED.nodes.getNode(n.nodered);
+    var operatorUrl = n.operatorUrl
+    var context = new ctx.Context()
+    // var operatorToken = RED.nodes.getNode(n.operatorToken) // not used
 
-    node.log(node.operatorUrl)
+    this.log('DNR Operator: ' + operatorUrl)
 
+    var flowsApi = null
     var auth = new Auth(
-      node.noderedPath, 
-      node.nodered? node.nodered.username : '',
-      node.nodered? node.nodered.password : ''
+      getListenPath(RED.settings), 
+      localNR? localNR.username : '',
+      localNR? localNR.password : ''
     )
 
     auth.probeAuth().then(r=>{
-      node.flowsApi = new FlowsAPI(auth)
+      flowsApi = new FlowsAPI(auth)
     }).catch(function(e){
       auth.auth().then(r=>{
-        node.flowsApi = new FlowsAPI(auth)
+        flowsApi = new FlowsAPI(auth)
       }).catch(e=>{
-        node.warn('cannot authenticate with local Node RED ' + e)
+        throw 'cannot authenticate with local Node RED ' + e
       })
     })
 
-    node.connectWS()
-
-    node.on("close",function() {
-      node.active = false
-      node.ws.close()
+    this.on("close",function() {
+      active = false
+      if (ws){
+        ws.close()
+      }
     })
     
-    // setInterval(function(){
-    //   node.heartbeat.call(node)
-    // }, 5000)
+    this.getWs = function(){
+      return ws
+    }
+    this.setWs = function(w){
+      ws = w
+    }
+    this.isWsAlive = function(){
+      return wsAlive
+    }
+    this.setWsAlive = function(a){
+      wsAlive = a
+    }
+    this.getContext = function(){
+      return context
+    }
+    this.getFlowApi = function(){
+      return flowsApi
+    }
+    this.isActive = function(){
+      return active
+    }
+    this.getAttempt = function(){
+      return reconnectAttempts
+    }
+    this.setAttempt = function(a){
+      reconnectAttempts = a
+    }
+    this.getOperatorUrl = function(){
+      return operatorUrl
+    }
+    this.getLocalNR = function(){
+      return localNR
+    }
+    this.isRegistered = function(){
+      return registered
+    }
+    this.setRegistered = function(r){
+      registered = r
+    }
+
+    this.connectWS()
+
+    setInterval((function(node){
+      return function(){
+        node.heartbeat.call(node)
+      }
+    })(this), OPERATOR_HEARTBEAT)
   }
 
   DnrDaemonNode.prototype.heartbeat = function() {
+    if (this.isWsAlive() && this.isRegistered()){
+      this.getWs().send(JSON.stringify({
+        topic:'dnrhb', 
+        device: this.getLocalNR().deviceId,
+        context: this.getContext().query()
+      }))
+    }
   }
 
   DnrDaemonNode.prototype.connectWS = function() {
-    let node = this
-
-    let path = node.operatorUrl + 
-      (node.operatorUrl.slice(-1) == "/"?"":"/") + 
+    let path = this.getOperatorUrl() + 
+      (this.getOperatorUrl().slice(-1) == "/"?"":"/") + 
       "dnr"
 
-    node.ws = new WebSocket(path);
+    this.setWs(new WebSocket(path))
+    var ws = this.getWs();
 
-    node.ws.on('open', function() {
-      node.reconnectAttempts = 0;
+    let node = this
+    ws.on('open', function() {
+      node.setAttempt(0)
+      node.setWsAlive(true)
+
+      ws.send(JSON.stringify({
+        'topic':'register', 
+        'device': node.getLocalNR().deviceId || utils.generateId()
+      }))
     })
 
-    node.ws.on('message', function(msg) {
+    ws.on('message', function(msg) {
       try {
         node.log(msg)
         msg = JSON.parse(msg)
-        if (msg.topic === 'flow_deployed'){
-          var activeFlow = msg.data.activeFlow
-          var masterFlows = msg.data.allFlows
-
-          // mapping between flow label and id
-          // distinguishing between dnr flows and normal flows
-          activeFlow.label = 'dnr_' + activeFlow.id
-
-          node.flowsApi.getAllFlow()
-          .then(flows=>{
-            flows = JSON.parse(flows)
-            for (var i = 0; i<flows.length; i++){
-              if (flows[i].type !== 'tab'){
-                continue
-              }
-
-              // sync local flows with master flows: we
-              // want to remove local flows that have been deleted
-              // on master flows.
-
-              // TODO: seems like a node-red bug, cannot delete
-              // multiple flows concurrently!!
-              // Same thing applies to installing
-              // uncomment the following block when resolved
-
-              // if (masterFlows.indexOf(flows[i].label.replace('dnr_','')) == -1 && 
-              //     flows[i].label !== 'DNR Seed' &&
-              //     flows[i].label.indexOf('dnr_') == 0){
-              //   node.flowsApi.uninstallFlow(flows[i].id)
-              //   continue
-              // }
-
-              // to update local flow: uninstall it first and reinstall 
-              // with remote version
-              if (flows[i].label.replace('dnr_','') === activeFlow.id){
-                return node.flowsApi.uninstallFlow(flows[i].id)
-              }
-            }
-          })
-          .then(()=>{
-            node.flowsApi.installFlow(JSON.stringify(Dnr.dnrize(activeFlow)))
-          })
-        }
       } catch (err){
         node.error(err)
-      }
-    });
-
-    node.ws.on('close', noConnection)
-    node.ws.on('error', noConnection)
-
-    function noConnection(e) {
-      if (!node.active){
         return
       }
 
-      node.ws.close()// rest assured, this won't trigger close event!
+      if (msg.topic === 'register_ack'){
+        if (!msg.idOk){
+          node.warn('duplicated device id found on cluster,\
+                      using the assigned id ' + msg.id)
+        }
+        node.getLocalNR().deviceId = msg.id
+        node.setRegistered(true)
+      }
 
-      node.reconnectAttempts++;
+      if (msg.topic === 'flow_deployed'){
+        var activeFlow = msg.data.activeFlow
+        var masterFlows = msg.data.allFlows
 
-      if (node.reconnectAttempts < 10) {
+        // mapping between flow label and id
+        // distinguishing between dnr flows and normal flows
+        activeFlow.label = 'dnr_' + activeFlow.id
+
+        node.getFlowApi().getAllFlow()
+        .then(flows=>{
+          flows = JSON.parse(flows)
+          for (var i = 0; i<flows.length; i++){
+            if (flows[i].type !== 'tab'){
+              continue
+            }
+
+            // sync local flows with master flows: we
+            // want to remove local flows that have been deleted
+            // on master flows.
+
+            // TODO: seems like a node-red bug, cannot delete
+            // multiple flows concurrently!!
+            // Same thing applies to installing
+            // uncomment the following block when resolved
+
+            // if (masterFlows.indexOf(flows[i].label.replace('dnr_','')) == -1 && 
+            //     flows[i].label !== 'DNR Seed' &&
+            //     flows[i].label.indexOf('dnr_') == 0){
+            //   node.flowsApi.uninstallFlow(flows[i].id)
+            //   continue
+            // }
+
+            // to update local flow: uninstall it first and reinstall 
+            // with remote version
+            if (flows[i].label.replace('dnr_','') === activeFlow.id){
+              return node.getFlowApi().uninstallFlow(flows[i].id)
+            }
+          }
+        })
+        .then(()=>{
+          let dnrizedFlow = Dnr.dnrize(activeFlow)
+          for (let n of dnrizedFlow.nodes){
+            if (n.type === 'dnr-gateway'){
+              n.config.daemon = node.id
+              break
+            }
+          }
+          node.getFlowApi().installFlow(JSON.stringify(dnrizedFlow))
+        })
+      }
+      
+    });
+
+    ws.on('close', noConnection)
+    ws.on('error', noConnection)
+
+    function noConnection(e) {
+      node.setWsAlive(false)
+      node.setRegistered(false)
+
+      if (!node.isActive()){
+        return
+      }
+
+      node.getWs().close()// rest assured, this won't trigger close event!
+
+      node.setAttempt(node.getAttempt()+1);
+
+      if (node.getAttempt() < 10) {
         node.log('reconnecting to dnr operator')
         setTimeout(()=>node.connectWS.call(node),2000);
       } else {
@@ -173,20 +258,19 @@ module.exports = function(RED) {
 
   function NodeRedCredentialsNode(n) {
     RED.nodes.createNode(this,n);
-    var node = this;
+    this.deviceId = n.deviceId
 
-    if (node.credentials) {
-      node.username = node.credentials.username;
-      node.password = node.credentials.password;
+    if (this.credentials) {
+      this.username = this.credentials.username;
+      this.password = this.credentials.password;
     }
   }
 
   function OperatorCredentialsNode(n) {
     RED.nodes.createNode(this,n);
-    var node = this;
 
-    if (node.credentials) {
-      node.token = node.credentials.token;
+    if (this.credentials) {
+      this.token = this.credentials.token;
     }
   }
 
@@ -195,7 +279,7 @@ module.exports = function(RED) {
   RED.nodes.registerType("nodered-credentials", NodeRedCredentialsNode, {
     credentials: {
       username: {type:"text"},
-      password: {type:"text"}
+      password: {type:"password"}
     }
   });
 
@@ -205,18 +289,18 @@ module.exports = function(RED) {
     }
   });
 
-  RED.httpAdmin.post("/dnr_daemon/:id", RED.auth.needsPermission("dnrdaemon.trigger"), function(req,res) {
-    var node = RED.nodes.getNode(req.params.id);
-    if (node != null) {
-      try {
-          node.receive({payload:'test daemon'});
-          res.sendStatus(200);
-      } catch(err) {
-          res.sendStatus(500);
-          node.error(RED._("dnr_daemon.failed",{error:err.toString()}));
-      }
-    } else {
-        res.sendStatus(404);
-    }
-  });
+  // RED.httpAdmin.post("/dnr_daemon/:id", RED.auth.needsPermission("dnrdaemon.trigger"), function(req,res) {
+  //   var node = RED.nodes.getNode(req.params.id);
+  //   if (node != null) {
+  //     try {
+  //         node.receive({payload:'test daemon'});
+  //         res.sendStatus(200);
+  //     } catch(err) {
+  //         res.sendStatus(500);
+  //         node.error(RED._("dnr_daemon.failed",{error:err.toString()}));
+  //     }
+  //   } else {
+  //       res.sendStatus(404);
+  //   }
+  // });
 }

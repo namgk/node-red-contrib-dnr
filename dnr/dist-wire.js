@@ -15,7 +15,6 @@
  **/
 
 var utils = require("./utils");
-var context = require("./context");
 var Broker = require('./broker');
 
 module.exports = function(RED) {
@@ -33,7 +32,7 @@ module.exports = function(RED) {
     // node.input: "source_port"
     node.input = n.input;
     node.linkType = n.linkType
-    node.state = context.NORMAL
+    node.state = node.gateway.context.NORMAL
 
     node.on('input', function(msg){
       node.gateway.dispatch(node, msg)
@@ -50,7 +49,9 @@ module.exports = function(RED) {
     this.flow = this.config.flow
     this.nodesMap = {}
     this.dnrNodesMap = {} // key: a normal node, value: the dnr node preceed it
-    
+    this.daemon = RED.nodes.getNode(n.config.daemon)
+    this.context = this.daemon.getContext()
+
     for (var node of this.flow.nodes){
       this.nodesMap[node.id] = node
     }
@@ -75,14 +76,14 @@ module.exports = function(RED) {
       /*
         need to decide how this dnr node should behave
       */
-      var state = context.reason(aNode, cNode)
+      var state = this.context.reason(aNode, cNode)
       if (dnrNode.state === state){
-        return
+        continue
       }
 
       dnrNode.state = state
 
-      if (state === context.FETCH_FORWARD){
+      if (state === this.context.FETCH_FORWARD){
         // fetch data from external node, aNode won't send anything!
         // dnrNode.input: 'nodeId_outport'
         var topic = dnrNode.input
@@ -101,10 +102,10 @@ module.exports = function(RED) {
 
   DnrGatewayNode.prototype.dispatch = function(dnrNode, msg) {
     switch (dnrNode.state) {
-      case context.NORMAL:
+      case this.context.NORMAL:
         dnrNode.send(msg)
         break;
-      case context.RECEIVE_REDIRECT:
+      case this.context.RECEIVE_REDIRECT:
         var topic = dnrNode.input
         this.broker.publish(dnrNode, topic, JSON.stringify(msg))
         break;
