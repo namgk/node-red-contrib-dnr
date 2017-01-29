@@ -23,16 +23,31 @@ function Broker(config){
 }
 
 Broker.prototype.subscribe = function(subscriber, topic, cb) {
-	if (!this.subscription[subscriber]){
-    this.subscription[subscriber] = {topic: topic, cb:cb}
+	if (this.subscription[subscriber]) {
+    // updating old topic
+    let oldTopic = this.subscription[subscriber].topic
+    if (oldTopic === topic){
+      return
+    }
+    
+    if (this.topics[oldTopic]){
+      this.topics[oldTopic]--
+    }
+    if (this.topic[oldTopic] <= 0){
+      this.client.unsubscribe(oldTopic)
+    }
   }
+
   if (!this.topics[topic]){
     this.topics[topic] = 1
+    this.client.subscribe(topic)
   } else {
     this.topics[topic]++
   }
-  this.client.subscribe(topic)
-};
+
+  // either updating or create new
+  this.subscription[subscriber] = {topic: topic, cb:cb}
+}
 
 Broker.prototype.unsubscribe = function(subscriber) {
   for (let k in this.subscription){
