@@ -1,6 +1,6 @@
 {
   "name": "node-red-contrib-dnr",
-  "version": "1.0.3",
+  "version": "2.0.1",
   "description": "special node used in distributed node red",
   "main": "index.js",
   "scripts": {
@@ -22,7 +22,8 @@
   },
   "homepage": "https://github.com/namgk/node-red-contrib-dnr#readme",
   "dependencies": {
-    "dnr-daemon": "^1.0.0",
+    "dnr-daemon": "^2.0.3",
+    "mqtt": "^2.2.1",
     "ws": "^1.1.1"
   },
   "node-red": {

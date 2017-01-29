@@ -16,7 +16,8 @@
 
 // })
 "use strict";
-var utils = require("./utils");
+var utils = require("./utils")
+var os = require('os')
 
 var CONTEXT_SNAPSHOT = 5000
 // var NORMAL = 1
@@ -27,7 +28,7 @@ var CONTEXT_SNAPSHOT = 5000
 function Context(){
 
   // demo
-  this.device = '.node-red1'//parseInt(process.argv[3].split('/')[3].substring(9,10))
+  this.device = null //parseInt(process.argv[3].split('/')[3].substring(9,10))
   // on road: device 1,2 // .node-red1
   // on bases: device 3,4 
   // cloud service: 5
@@ -45,46 +46,68 @@ Context.DROP = 2
 Context.FETCH_FORWARD = 3
 Context.RECEIVE_REDIRECT = 4
 
+Context.prototype.setLocalNR = function(localNR) {
+  this.device = localNR.deviceId
+  this.cores = os.cpus().length
+}
+
 Context.prototype.snapshot = function() {
   let location = {}
   let freeMem = 0
-  let freeStorage = 0
   // snapshoting
-  // ...
   this.location = location
-  this.freeMem = freeMem
-  this.freeStorage = freeStorage
+  this.freeMem = os.freemem()/1000000 // bytes to MB
 }
 
 Context.prototype.query = function() {
   return {
     location: this.location,
     freeMem: this.freeMem,
-    freeStorage: this.freeStorage
+    cores: this.cores
   }
 }
 
+// "constraints":{"link":{},"In Vancouver, BC":{"id":"In Vancouver, BC","fill":"#25c6a1","text":"In Vancouver, BC"}}
 Context.prototype.satisfying = function(constraints) {
-  // demo
-  for (var c in constraints){
-    if (c === 'link'){
+  // AND all constraints together
+  for (var cid in constraints){
+    if (cid === 'link'){
       continue
     }
 
-    if (c === 'on road' || c === 'near Road Sensors'){
-      return this.device === 1 || this.device === 2
-    }
+    for (let cElement in constraints[cid]){
+      if (cElement === 'id' ||
+          cElement === 'fill' ||
+          cElement === 'text'){
+        continue
+      }
 
-    if (c === 'on bases'){
-      return this.device === 3 || this.device === 4
-    }
+      if (cElement === 'deviceId'){
+        if (!this.deviceId ||
+            this.deviceId !== constraints[cid][cElement]){
+          return false
+        }
+      }
 
-    if (c === 'cloud service'){
-      return this.device === 5
+      if (cElement === 'cores'){
+        if (!this.cores ||
+            this.cores < constraints[cid][cElement]){
+          return false
+        }
+      }
+
+      if (cElement === 'location'){
+        continue // not implemented
+      }
+
+      if (cElement === 'memory' && 
+          this.freeMem < constraints[cid][cElement]){
+        return false
+      }
     }
   }
 
-  return false
+  return true
 };
 
 // aNode ------ dnrNode ----- cNode

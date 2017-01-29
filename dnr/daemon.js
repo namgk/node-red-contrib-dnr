@@ -51,6 +51,7 @@ module.exports = function(RED) {
     var localNR = RED.nodes.getNode(n.nodered);
     var operatorUrl = n.operatorUrl
     var context = new ctx.Context()
+    context.setLocalNR(localNR)
     // var operatorToken = RED.nodes.getNode(n.operatorToken) // not used
 
     this.log('DNR Operator: ' + operatorUrl)

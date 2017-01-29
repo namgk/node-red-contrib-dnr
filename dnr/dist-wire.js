@@ -16,11 +16,12 @@
 
 var utils = require("./utils");
 var Broker = require('./broker');
+var request = require("request-promise-native");
 
 module.exports = function(RED) {
   "use strict";
 
-  function DNRNode(n){
+  function DnrNode(n){
     RED.nodes.createNode(this,n);
     var node = this;
 
@@ -42,6 +43,7 @@ module.exports = function(RED) {
   }
 
 
+  // one per flow
   function DnrGatewayNode(n) {
     RED.nodes.createNode(this,n);
     this.config = n.config
@@ -51,6 +53,8 @@ module.exports = function(RED) {
     this.dnrNodesMap = {} // key: a normal node, value: the dnr node preceed it
     this.daemon = RED.nodes.getNode(n.config.daemon)
     this.context = this.daemon.getContext()
+    this.device = this.daemon.getLocalNR().deviceId
+    this.flowCoordinator = this.daemon.getOperatorUrl()// TODO: should get this from flow meta-data
 
     for (var node of this.flow.nodes){
       this.nodesMap[node.id] = node
@@ -62,8 +66,11 @@ module.exports = function(RED) {
     }, 5000)
   }
 
-  // update the state of each dnr node according to device context
   DnrGatewayNode.prototype.heartbeat = function() {
+    var dnrLinks = []
+    var contextChanged = false
+
+    // update the state of each dnr node according to device context
     for (var k in this.nodesMap){
       // aNode ------ dnrNode ----- cNode
       var cNode = this.nodesMap[k]
@@ -73,27 +80,66 @@ module.exports = function(RED) {
       }
       var aNode = this.nodesMap[dnrNode.input.split('_')[0]]
 
-      /*
-        need to decide how this dnr node should behave
-      */
+      // need to decide how this dnr node should behave
       var state = this.context.reason(aNode, cNode)
       if (dnrNode.state === state){
         continue
       }
 
-      dnrNode.state = state
+      contextChanged = true
 
-      if (state === this.context.FETCH_FORWARD){
-        // fetch data from external node, aNode won't send anything!
-        // dnrNode.input: 'nodeId_outport'
-        var topic = dnrNode.input
-        this.broker.subscribe(dnrNode.id, topic, ((dnrNode) => {return function(msg){
-          dnrNode.send(JSON.parse(msg))
-        }})(dnrNode))
-      } else {
+      if (dnrNode.state === this.context.FETCH_FORWARD && 
+        state !== this.context.FETCH_FORWARD){
         this.broker.unsubscribe(dnrNode)
       }
+
+      dnrNode.state = state
+
+      if (state === this.context.FETCH_FORWARD || 
+          state === this.context.RECEIVE_REDIRECT){
+        dnrLinks.push(dnrNode.input + cNode.id)
+      }
     }
+
+    if (!contextChanged){
+      return
+    }
+
+    // fetch rounting table
+    var opt = {
+      baseUrl: this.flowCoordinator,
+      uri: '/dnr/routingtable',
+      method: 'POST',
+      body: JSON.stringify(dnrLinks),
+      headers: {
+          'Content-type': 'application/json'
+      }
+    }
+    request(opt)
+    .then(function (body) {
+      let response = JSON.parse(body)
+      console.log(response)
+    })
+    .catch(function (er) {
+      console.log({ error: er.error, statusCode: er.statusCode, statusMessage: er.message });
+    });
+
+    // update pub/sub topics
+    // for (var k in this.nodesMap){
+    //   var cNode = this.nodesMap[k]
+    //   var dnrNode = this.dnrNodesMap[cNode.id]
+    //   if (!dnrNode){
+    //     continue
+    //   }
+
+    //   if (dnrNode.state === this.context.FETCH_FORWARD && 
+    //     dnrNode.subscribeTopic){
+    //     // fetch data from external node, aNode won't send anything!
+    //     this.broker.subscribe(dnrNode.id, dnrNode.subscribeTopic, ((dnrNode) => {return function(msg){
+    //       dnrNode.send(JSON.parse(msg))
+    //     }})(dnrNode))
+    //   }
+    // }
   }
 
   DnrGatewayNode.prototype.register = function(dnrNode) {
@@ -106,8 +152,9 @@ module.exports = function(RED) {
         dnrNode.send(msg)
         break;
       case this.context.RECEIVE_REDIRECT:
-        var topic = dnrNode.input
-        this.broker.publish(dnrNode, topic, JSON.stringify(msg))
+        if (dnrNode.publishTopic){
+          this.broker.publish(dnrNode, dnrNode.publishTopic, JSON.stringify(msg))
+        }
         break;
       // skipping DROP context here
       // in case of FETCH_FORWARD, it won't receive 'input' event
@@ -116,5 +163,5 @@ module.exports = function(RED) {
   }
 
   RED.nodes.registerType("dnr-gateway", DnrGatewayNode, {});
-  RED.nodes.registerType("dnr", DNRNode);
+  RED.nodes.registerType("dnr", DnrNode);
 }
