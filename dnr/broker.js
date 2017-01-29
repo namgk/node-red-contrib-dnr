@@ -29,7 +29,7 @@ Broker.prototype.subscribe = function(subscriber, topic, cb) {
     if (oldTopic === topic){
       return
     }
-    
+
     if (this.topics[oldTopic]){
       this.topics[oldTopic]--
     }

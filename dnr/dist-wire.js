@@ -42,6 +42,10 @@ module.exports = function(RED) {
       node.gateway.dispatch(node, msg)
     })
 
+    node.on('close', function(){
+      node.gateway.broker.unsubscribe(node.id)
+    })
+
     node.gateway.register(node);
   }
 
@@ -63,8 +67,19 @@ module.exports = function(RED) {
     }
 
     if (state !== ctxConstant.FETCH_FORWARD){
-      this.gateway.broker.unsubscribe(this)
+      this.gateway.broker.unsubscribe(this.id)
     }
+  }
+
+  DnrNode.prototype.resubscribe = function(topic) {
+    if (!topic){
+      return
+    }
+
+    this.subscribeTopic = topic
+    this.gateway.broker.subscribe(this.id, this.subscribeTopic, function(msg){
+      this.send(JSON.parse(msg))
+    }.bind(this))
   }
 
   // one per flow
@@ -80,24 +95,17 @@ module.exports = function(RED) {
     this.deviceId = this.daemon.getLocalNR().deviceId
     this.flowCoordinator = this.daemon.getOperatorUrl()// TODO: should get this from flow meta-data
 
-    for (var node of this.flow.nodes){
+    for (let node of this.flow.nodes){
       this.nodesMap[node.id] = node
     }
 
-    var gateway = this
-    setInterval(function(){
-      gateway.heartbeat.call(gateway)
-    }, 5000)
-  }
+    this.hbClock = setInterval(function(){
+      this.heartbeat()
+    }.bind(this), 5000)
 
-  DnrNode.prototype.resubscribe = function(topic) {
-    if (!topic){
-      return
-    }
-
-    this.subscribeTopic = topic
-    this.gateway.broker.subscribe(this.id, this.subscribeTopic, function(msg){
-      this.send(JSON.parse(msg))
+    this.on('close', function(){
+      this.log('stopping hb')
+      clearInterval(this.hbClock)
     }.bind(this))
   }
 
@@ -108,7 +116,7 @@ module.exports = function(RED) {
     // update the state of each dnr node according to device context
     for (let k in this.dnrNodesMap){
       // aNode ------ dnrNode ----- cNode
-      var dnrNode = this.dnrNodesMap[k]
+      let dnrNode = this.dnrNodesMap[k]
       let cNode = this.nodesMap[dnrNode.wires[0][0]]
       var aNode = this.nodesMap[dnrNode.input.split('_')[0]]
 
@@ -166,7 +174,7 @@ module.exports = function(RED) {
     var body = new dnrInterface.RoutingTableReq(
         this.deviceId, this.flow.id, dnrLinks
       ).toString()
-    console.log(body)
+    
     var opt = {
       baseUrl: this.flowCoordinator,
       uri: '/dnr/routingtable',
@@ -188,7 +196,7 @@ module.exports = function(RED) {
       for (let link in response){
         // link: <src node Id>_<outport>_<dest node Id>
         // get the DNR node for this link
-        var dnrNode = this.dnrNodesMap[link]
+        let dnrNode = this.dnrNodesMap[link]
         if (!dnrNode){
           continue
         }
@@ -199,6 +207,8 @@ module.exports = function(RED) {
         } else if (dnrNode.state === ctxConstant.RECEIVE_REDIRECT){
           dnrNode.publishTopic = response[link]
         }
+
+        dnrNode.stateUpdate(dnrNode.state)
       }
 
     }.bind(this))
