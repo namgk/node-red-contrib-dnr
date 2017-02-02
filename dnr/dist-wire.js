@@ -19,7 +19,7 @@ var Broker = require('./broker');
 var request = require("request-promise-native");
 var dnrInterface = require('dnr-interface')
 var ctxConstant = dnrInterface.Context
-var RoutingTableRes = dnrInterface.RoutingTableRes
+var DnrSyncRes = dnrInterface.DnrSyncRes
 
 module.exports = function(RED) {
   "use strict";
@@ -88,15 +88,18 @@ module.exports = function(RED) {
     this.config = n.config
     this.broker = new Broker(this.config)
     this.flow = this.config.flow
-    this.nodesMap = {}
-    this.dnrNodesMap = {} // key: a normal node, value: the dnr node preceed it
+    this.nodeIndexes = {}
+    this.dnrNodesMap = {} // key: link, value: the dnr node on it
     this.daemon = RED.nodes.getNode(n.config.daemon)
     this.context = this.daemon.getContext()
     this.deviceId = this.daemon.getLocalNR().deviceId
     this.flowCoordinator = this.daemon.getOperatorUrl()// TODO: should get this from flow meta-data
+    this.dnrLinksToRequest = {}
+    this.nodesToContribute = {}
 
-    for (let node of this.flow.nodes){
-      this.nodesMap[node.id] = node
+    for (let i in this.flow.nodes){
+      let node = this.flow.nodes[i]
+      this.nodeIndexes[node.id] = i
     }
 
     this.hbClock = setInterval(function(){
@@ -110,15 +113,12 @@ module.exports = function(RED) {
   }
 
   DnrGatewayNode.prototype.heartbeat = function() {
-    var dnrLinks = []
-    var contextChanged = false
-
     // update the state of each dnr node according to device context
     for (let k in this.dnrNodesMap){
       // aNode ------ dnrNode ----- cNode
       let dnrNode = this.dnrNodesMap[k]
-      let cNode = this.nodesMap[dnrNode.wires[0][0]]
-      var aNode = this.nodesMap[dnrNode.input.split('_')[0]]
+      let cNode = this.flow.nodes[this.nodeIndexes[dnrNode.wires[0][0]]]
+      var aNode = this.flow.nodes[this.nodeIndexes[dnrNode.input.split('_')[0]]]
 
       // need to decide how this dnr node should behave
       var state = this.context.reason(aNode, cNode)
@@ -127,18 +127,52 @@ module.exports = function(RED) {
         continue
       }
 
+      /*
+        TODO: consider when doing dnr-ization, skip adding dnr node in Normal state
+        
+        NORMAL state:
+
+          aNode ------dnr-----> cNode
+
+        DROP state:
+
+          aNode ------dnr       cNode
+
+        FETCH_FORWARD state:
+
+              external
+                    \
+                     \
+          aNode       \______\  cNode
+                             / 
+
+        RECEIVE_REDIRECT state:
+        
+                        _ external
+                        /|
+                       /
+          aNode ______/         aNode
+      */
+
+      switch (state){
+        case ctxConstant.FETCH_FORWARD:
+          this.nodesToContribute[cNode.id] = 1
+          delete this.nodesToContribute[aNode.id]
+          break;
+        case ctxConstant.RECEIVE_REDIRECT:
+          this.nodesToContribute[aNode.id] = 1
+          delete this.nodesToContribute[cNode.id]
+          break;
+        default:
+          delete this.nodesToContribute[aNode.id]
+          delete this.nodesToContribute[cNode.id]
+      }
       // update the pub/sub topics according to the state
       // there are several cases where daemons don't need to ask
       // for where they should send/fetch data to/from
-      // e.g 
+      // 
       //    if the link type is NN, the topic for pub/sub is 
       // always <srcId>_<srcPort>_<destId>
-      //    if the link type is 1N and the dnrNode status is RECEIVE_REDIRECT,
-      // the topic for publishing is always 
-      //    "from_<myself>_<srcId>_<srcPort>_<destId>"
-      //    similarly, if the link type is N1 and status is FETCH_FORWARD,
-      // the topic for subscribing is always
-      //    "to_<myself>_<srcId>_<srcPort>_<destId>"
       if (dnrNode.linkType === 'NN'){
         if (state === ctxConstant.FETCH_FORWARD){
           dnrNode.resubscribe(k)
@@ -147,6 +181,15 @@ module.exports = function(RED) {
         }
       }
 
+      //    if the link type is 1N and the dnrNode status is RECEIVE_REDIRECT,
+      // the topic for publishing is always 
+      //    "from_<myself>_<srcId>_<srcPort>_<destId>"
+      //    similarly, if the link type is N1 and status is FETCH_FORWARD,
+      // the topic for subscribing is always
+      //    "to_<myself>_<srcId>_<srcPort>_<destId>"
+      //
+      // in short: if inactive node is on the 1 side, it needs to ask coordinator
+      //           if inactive node is on the N side, it uses itself
       if (dnrNode.linkType === 'N1' && state === ctxConstant.FETCH_FORWARD){
         dnrNode.resubscribe('to_' + this.deviceId + '_'  + k)
       }
@@ -158,24 +201,20 @@ module.exports = function(RED) {
       if ((dnrNode.linkType !== 'N1' && state === ctxConstant.FETCH_FORWARD) ||
           (dnrNode.linkType !== '1N' && state === ctxConstant.RECEIVE_REDIRECT)
         ){
-        dnrLinks.push(dnrNode.input + '_' + cNode.id + '-' + state)
-        // there is a context change and a need for updating the route table
-        contextChanged = true
+        this.dnrLinksToRequest[dnrNode.input + '_' + cNode.id + '-' + state] = 1
       }
 
       dnrNode.stateUpdate(state)
     }
 
-    if (!contextChanged){
-      return
-    }
-
-    // fetch rounting table
-    var body = new dnrInterface.RoutingTableReq(
-        this.deviceId, this.flow.id, dnrLinks
+    // update with coordinator/requesting topics for dnrlinks
+    var body = new dnrInterface.DnrSyncReq(
+        this.deviceId, this.flow.id, 
+        Object.keys(this.dnrLinksToRequest),
+        Object.keys(this.nodesToContribute)
       ).toString()
     
-    var opt = {
+    request({
       baseUrl: this.flowCoordinator,
       uri: '/dnr/routingtable',
       method: 'POST',
@@ -183,17 +222,21 @@ module.exports = function(RED) {
       headers: {
         'Content-type': 'application/json'
       }
-    }
-    request(opt)
+    })
     .then(function (body) {
-      let response = new RoutingTableRes().fromString(body)
+      console.log(body)
+      let response = new DnrSyncRes().fromString(body)
+      let dnrLinks = response.dnrLinks
       /* response should look like:
         {
-          <link> : <topic>
+          dnrLinks: {
+            <link> : <topic>
+          },
+          brokers: []
         }
       */
 
-      for (let link in response){
+      for (let link in dnrLinks){
         // link: <src node Id>_<outport>_<dest node Id>
         // get the DNR node for this link
         let dnrNode = this.dnrNodesMap[link]
@@ -209,6 +252,9 @@ module.exports = function(RED) {
         }
 
         dnrNode.stateUpdate(dnrNode.state)
+
+        // remove the pending dnrLink To Request
+        delete this.dnrLinksToRequest[link]
       }
 
     }.bind(this))

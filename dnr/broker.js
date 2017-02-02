@@ -53,9 +53,10 @@ Broker.prototype.unsubscribe = function(subscriber) {
   for (let k in this.subscription){
     if (k === subscriber){
       var topic = this.subscription[k].topic
+
       if (this.topics[topic]){
         this.topics[topic]--
-        if (this.topic[topic] <= 0){
+        if (this.topics[topic] <= 0){
           this.client.unsubscribe(topic)
         }
       }

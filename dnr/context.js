@@ -20,31 +20,15 @@ var utils = require("./utils")
 var os = require('os')
 
 var CONTEXT_SNAPSHOT = 5000
-// var NORMAL = 1
-// var DROP = 2
-// var FETCH_FORWARD = 3
-// var RECEIVE_REDIRECT = 4
 
 function Context(){
-
-  // demo
-  this.device = null //parseInt(process.argv[3].split('/')[3].substring(9,10))
-  // on road: device 1,2 // .node-red1
-  // on bases: device 3,4 
-  // cloud service: 5
-  // near Road Sensors: device 1, 2
-
+  this.device = null 
   setInterval((function(context){
     return function(){
       context.snapshot.call(context)
     }
   })(this), CONTEXT_SNAPSHOT)
 }
-
-Context.NORMAL = 1
-Context.DROP = 2
-Context.FETCH_FORWARD = 3
-Context.RECEIVE_REDIRECT = 4
 
 Context.prototype.setLocalNR = function(localNR) {
   this.device = localNR.deviceId
@@ -110,7 +94,6 @@ Context.prototype.satisfying = function(constraints) {
   return true
 };
 
-// aNode ------ dnrNode ----- cNode
 /*
   need to decide how this dnr node should behave.
   this includes:
@@ -123,7 +106,37 @@ Context.prototype.satisfying = function(constraints) {
   (aNode never sends any data to dnrNode)
 
   it should drop if aNode doesn't have any constraint (all devices have aNode running)
+
+  aNode ------ dnrNode ----- cNode
+  
+  NORMAL state:
+
+    aNode ------dnr-----> cNode
+
+  DROP state:
+
+    aNode ------dnr       cNode
+
+  FETCH_FORWARD state:
+ 
+        external               
+              \                
+               \               
+    aNode       \______\  cNode
+                       / 
+
+  RECEIVE_REDIRECT state:
+  
+                  _ external
+                  /|
+                 /
+    aNode ______/         aNode
 */
+Context.NORMAL = 1
+Context.DROP = 2
+Context.FETCH_FORWARD = 3
+Context.RECEIVE_REDIRECT = 4
+
 Context.prototype.reason = function(aNode, cNode) {
   if (!utils.hasConstraints(aNode)){
     // should be receiving from aNode
