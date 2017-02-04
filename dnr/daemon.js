@@ -21,6 +21,15 @@ var WebSocket = require("ws")
 var ctx = require("./context")
 var utils = require('./utils')
 
+var dnrInterface = require('dnr-interface')
+var TOPIC_DNR_HB = dnrInterface.TOPIC_DNR_HB
+var TOPIC_REGISTER = dnrInterface.TOPIC_REGISTER
+var TOPIC_REGISTER_ACK = dnrInterface.TOPIC_REGISTER_ACK
+var TOPIC_DNR_SYN_REQ = dnrInterface.TOPIC_DNR_SYN_REQ
+var TOPIC_DNR_SYN_RES = dnrInterface.TOPIC_DNR_SYN_RES
+var TOPIC_DNR_SYN_RESS = dnrInterface.TOPIC_DNR_SYN_RESS
+var TOPIC_FLOW_DEPLOYED = dnrInterface.TOPIC_FLOW_DEPLOYED
+
 var OPERATOR_HEARTBEAT = 5000
 
 function getListenPath(settings) {
@@ -41,6 +50,9 @@ module.exports = function(RED) {
   // there should be only one instance of this node throughout the local Node-RED
   function DnrDaemonNode(n) {
     RED.nodes.createNode(this,n);
+
+    this.flowGateway = {} // dnrGatewayId --> {topic:<>, cb: func}
+    this.dnrSyncReqs = {} // flowId --> dnrSyncReq
 
     var reconnectAttempts = 0
     var active = true
@@ -130,11 +142,21 @@ module.exports = function(RED) {
   }
 
   DnrDaemonNode.prototype.heartbeat = function() {
+    // triger heartbeat for all dnrGateway node
+    for (let k in this.flowGateway){
+      let gateway = this.flowGateway[k]
+      let gatewayNode = RED.nodes.getNode(gateway)
+      if (gatewayNode){
+        gatewayNode.heartbeat()
+      }
+    }
+
     if (this.isWsAlive() && this.isRegistered()){
       this.getWs().send(JSON.stringify({
-        topic:'dnrhb', 
+        topic:TOPIC_DNR_HB, 
         device: this.getLocalNR().deviceId,
-        context: this.getContext().query()
+        context: this.getContext().query(),
+        dnrSyncReqs: this.dnrSyncReqs
       }))
     }
   }
@@ -145,7 +167,7 @@ module.exports = function(RED) {
       "dnr"
 
     this.setWs(new WebSocket(path))
-    var ws = this.getWs();
+    var ws = this.getWs()
 
     let node = this
     ws.on('open', function() {
@@ -162,72 +184,86 @@ module.exports = function(RED) {
       try {
         node.log(msg)
         msg = JSON.parse(msg)
+
+        if (msg.topic === TOPIC_REGISTER_ACK){
+          if (!msg.idOk){
+            node.warn('duplicated device id found on cluster,\
+                        using the assigned id ' + msg.id)
+          }
+          node.getLocalNR().deviceId = msg.id
+          node.setRegistered(true)
+        }
+
+        if (msg.topic === TOPIC_FLOW_DEPLOYED){
+          var activeFlow = msg.data.activeFlow
+          var masterFlows = msg.data.allFlows
+
+          // mapping between flow label and id
+          // distinguishing between dnr flows and normal flows
+          activeFlow.label = 'dnr_' + activeFlow.id
+
+          node.getFlowApi().getAllFlow()
+          .then(flows=>{
+            flows = JSON.parse(flows)
+            for (var i = 0; i<flows.length; i++){
+              if (flows[i].type !== 'tab'){
+                continue
+              }
+
+              // sync local flows with master flows: we
+              // want to remove local flows that have been deleted
+              // on master flows.
+
+              // TODO: seems like a node-red bug, cannot delete
+              // multiple flows concurrently!!
+              // Same thing applies to installing
+              // uncomment the following block when resolved
+
+              // if (masterFlows.indexOf(flows[i].label.replace('dnr_','')) == -1 && 
+              //     flows[i].label !== 'DNR Seed' &&
+              //     flows[i].label.indexOf('dnr_') == 0){
+              //   node.flowsApi.uninstallFlow(flows[i].id)
+              //   continue
+              // }
+
+              // to update local flow: uninstall it first and reinstall 
+              // with remote version
+              if (flows[i].label.replace('dnr_','') === activeFlow.id){
+                return node.getFlowApi().uninstallFlow(flows[i].id)
+              }
+            }
+          })
+          .then(()=>{
+            let dnrizedFlow = Dnr.dnrize(activeFlow)
+            for (let n of dnrizedFlow.nodes){
+              if (n.type === 'dnr-gateway'){
+                n.config.daemon = node.id
+                break
+              }
+            }
+            node.getFlowApi().installFlow(JSON.stringify(dnrizedFlow))
+          })
+        }
+
+        if (msg.topic === TOPIC_DNR_SYN_RESS){
+          let resps = msg.dnrSyncRess
+          for (let resp of resps){
+            let dnrSyncReq = resp.dnrSyncReq
+            let dnrSyncRes = resp.dnrSyncRes
+            let gateway = node.flowGateway[dnrSyncReq.flowId]
+            let gatewayNode = RED.nodes.getNode(gateway)
+            if(gatewayNode){
+              gatewayNode.receive(dnrSyncRes)
+            }
+
+            delete node.dnrSyncReqs[dnrSyncReq.flowId]
+          }
+        }
       } catch (err){
         node.error(err)
         return
       }
-
-      if (msg.topic === 'register_ack'){
-        if (!msg.idOk){
-          node.warn('duplicated device id found on cluster,\
-                      using the assigned id ' + msg.id)
-        }
-        node.getLocalNR().deviceId = msg.id
-        node.setRegistered(true)
-      }
-
-      if (msg.topic === 'flow_deployed'){
-        var activeFlow = msg.data.activeFlow
-        var masterFlows = msg.data.allFlows
-
-        // mapping between flow label and id
-        // distinguishing between dnr flows and normal flows
-        activeFlow.label = 'dnr_' + activeFlow.id
-
-        node.getFlowApi().getAllFlow()
-        .then(flows=>{
-          flows = JSON.parse(flows)
-          for (var i = 0; i<flows.length; i++){
-            if (flows[i].type !== 'tab'){
-              continue
-            }
-
-            // sync local flows with master flows: we
-            // want to remove local flows that have been deleted
-            // on master flows.
-
-            // TODO: seems like a node-red bug, cannot delete
-            // multiple flows concurrently!!
-            // Same thing applies to installing
-            // uncomment the following block when resolved
-
-            // if (masterFlows.indexOf(flows[i].label.replace('dnr_','')) == -1 && 
-            //     flows[i].label !== 'DNR Seed' &&
-            //     flows[i].label.indexOf('dnr_') == 0){
-            //   node.flowsApi.uninstallFlow(flows[i].id)
-            //   continue
-            // }
-
-            // to update local flow: uninstall it first and reinstall 
-            // with remote version
-            if (flows[i].label.replace('dnr_','') === activeFlow.id){
-              return node.getFlowApi().uninstallFlow(flows[i].id)
-            }
-          }
-        })
-        .then(()=>{
-          let dnrizedFlow = Dnr.dnrize(activeFlow)
-          for (let n of dnrizedFlow.nodes){
-            if (n.type === 'dnr-gateway'){
-              n.config.daemon = node.id
-              break
-            }
-          }
-          node.getFlowApi().installFlow(JSON.stringify(dnrizedFlow))
-        })
-      }
-      
-    });
+    })
 
     ws.on('close', noConnection)
     ws.on('error', noConnection)

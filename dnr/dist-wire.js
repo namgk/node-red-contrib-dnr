@@ -25,10 +25,10 @@ module.exports = function(RED) {
   "use strict";
 
   function DnrNode(n){
-    RED.nodes.createNode(this,n);
+    RED.nodes.createNode(this,n)
     var node = this;
 
-    node.gateway = RED.nodes.getNode(n.gateway);
+    node.gateway = RED.nodes.getNode(n.gateway)
     if (!node.gateway){
       throw "No dnr gateway configured for this flow";
     }
@@ -91,6 +91,8 @@ module.exports = function(RED) {
     this.nodeIndexes = {}
     this.dnrNodesMap = {} // key: link, value: the dnr node on it
     this.daemon = RED.nodes.getNode(n.config.daemon)
+    this.daemon.flowGateway[this.flow.id] = this.id
+
     this.context = this.daemon.getContext()
     this.deviceId = this.daemon.getLocalNR().deviceId
     this.flowCoordinator = this.daemon.getOperatorUrl()// TODO: should get this from flow meta-data
@@ -102,17 +104,20 @@ module.exports = function(RED) {
       this.nodeIndexes[node.id] = i
     }
 
-    this.hbClock = setInterval(function(){
-      this.heartbeat()
-    }.bind(this), 5000)
-
-    this.on('close', function(){
-      this.log('stopping hb')
-      clearInterval(this.hbClock)
+    // dnr sync response received from daemon
+    this.on('input', function(msg){
+      let response = new DnrSyncRes().fromObj(msg)
+      this.processSyncRes(response)
     }.bind(this))
   }
 
+  // to be triggered by daemon node
   DnrGatewayNode.prototype.heartbeat = function() {
+    // TODO: should we??? device not registered
+    if (!this.deviceId){
+      return
+    }
+
     // update the state of each dnr node according to device context
     for (let k in this.dnrNodesMap){
       // aNode ------ dnrNode ----- cNode
@@ -130,23 +135,23 @@ module.exports = function(RED) {
       /*
         TODO: consider when doing dnr-ization, skip adding dnr node in Normal state
         
-        NORMAL state:
+        1. NORMAL state:
 
           aNode ------dnr-----> cNode
 
-        DROP state:
+        2. DROP state:
 
           aNode ------dnr       cNode
 
-        FETCH_FORWARD state:
+        3. FETCH_FORWARD state:
 
-              external
+            external
                     \
                      \
           aNode       \______\  cNode
                              / 
 
-        RECEIVE_REDIRECT state:
+        4. RECEIVE_REDIRECT state:
         
                         _ external
                         /|
@@ -166,6 +171,8 @@ module.exports = function(RED) {
         default:
           delete this.nodesToContribute[aNode.id]
           delete this.nodesToContribute[cNode.id]
+          dnrNode.stateUpdate(state)
+          continue
       }
       // update the pub/sub topics according to the state
       // there are several cases where daemons don't need to ask
@@ -198,8 +205,9 @@ module.exports = function(RED) {
         dnrNode.publishTopic = 'from_' + this.deviceId + '_' + k
       }
 
-      if ((dnrNode.linkType !== 'N1' && state === ctxConstant.FETCH_FORWARD) ||
-          (dnrNode.linkType !== '1N' && state === ctxConstant.RECEIVE_REDIRECT)
+      if ((dnrNode.linkType === '1N' && state === ctxConstant.FETCH_FORWARD) ||
+          (dnrNode.linkType === 'N1' && state === ctxConstant.RECEIVE_REDIRECT) ||
+          (dnrNode.linkType === '11')
         ){
         this.dnrLinksToRequest[dnrNode.input + '_' + cNode.id + '-' + state] = 1
       }
@@ -208,59 +216,44 @@ module.exports = function(RED) {
     }
 
     // update with coordinator/requesting topics for dnrlinks
-    var body = new dnrInterface.DnrSyncReq(
-        this.deviceId, this.flow.id, 
-        Object.keys(this.dnrLinksToRequest),
-        Object.keys(this.nodesToContribute)
-      ).toString()
-    
-    request({
-      baseUrl: this.flowCoordinator,
-      uri: '/dnr/routingtable',
-      method: 'POST',
-      body: body,
-      headers: {
-        'Content-type': 'application/json'
-      }
-    })
-    .then(function (body) {
-      console.log(body)
-      let response = new DnrSyncRes().fromString(body)
-      let dnrLinks = response.dnrLinks
-      /* response should look like:
-        {
-          dnrLinks: {
-            <link> : <topic>
-          },
-          brokers: []
-        }
-      */
+    this.daemon.dnrSyncReqs[this.flow.id] = new dnrInterface.DnrSyncReq(
+      this.deviceId, this.flow.id, 
+      Object.keys(this.dnrLinksToRequest),
+      Object.keys(this.nodesToContribute)
+    )
+  }
 
-      for (let link in dnrLinks){
-        // link: <src node Id>_<outport>_<dest node Id>
-        // get the DNR node for this link
-        let dnrNode = this.dnrNodesMap[link]
-        if (!dnrNode){
-          continue
-        }
+  /* @param response:
+    {
+      dnrLinks: {
+        <link> : <topic>
+      },
+      brokers: []
+    }
+  */
+  DnrGatewayNode.prototype.processSyncRes = function(response) {
+    let dnrLinks = response.dnrLinks
 
-        // update its comm topics
-        if (dnrNode.state === ctxConstant.FETCH_FORWARD){
-          dnrNode.resubscribe(response[link])
-        } else if (dnrNode.state === ctxConstant.RECEIVE_REDIRECT){
-          dnrNode.publishTopic = response[link]
-        }
-
-        dnrNode.stateUpdate(dnrNode.state)
-
-        // remove the pending dnrLink To Request
-        delete this.dnrLinksToRequest[link]
+    for (let link in dnrLinks){
+      // link: <src node Id>_<outport>_<dest node Id>
+      // get the DNR node for this link
+      let dnrNode = this.dnrNodesMap[link]
+      if (!dnrNode){
+        continue
       }
 
-    }.bind(this))
-    .catch(function (er) {
-      console.log({ error: er.error, statusCode: er.statusCode, statusMessage: er.message });
-    });
+      // update its comm topics
+      if (dnrNode.state === ctxConstant.FETCH_FORWARD){
+        dnrNode.resubscribe(response[link])
+      } else if (dnrNode.state === ctxConstant.RECEIVE_REDIRECT){
+        dnrNode.publishTopic = response[link]
+      }
+
+      dnrNode.stateUpdate(dnrNode.state)
+
+      // remove the pending dnrLink To Request
+      delete this.dnrLinksToRequest[link]
+    }
   }
 
   DnrGatewayNode.prototype.register = function(dnrNode) {
