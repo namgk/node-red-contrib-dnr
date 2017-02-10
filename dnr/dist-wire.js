@@ -213,9 +213,13 @@ module.exports = function(RED) {
       }
 
       dnrNode.stateUpdate(state)
-    }
+    }// end for
 
     // update with coordinator/requesting topics for dnrlinks
+    if (Object.keys(this.dnrLinksToRequest).length === 0 && 
+        Object.keys(this.nodesToContribute).length === 0){
+      return
+    }
     this.daemon.dnrSyncReqs[this.flow.id] = new dnrInterface.DnrSyncReq(
       this.deviceId, this.flow.id, 
       Object.keys(this.dnrLinksToRequest),

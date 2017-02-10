@@ -50,22 +50,106 @@
     <label for="node-config-input-deviceId"><i class="fa"></i>Device Id</label>
     <input type="text" id="node-config-input-deviceId">
   </div>
+  <div class="form-row">
+    <label>Location fixed?</label>
+    <input type="checkbox" id="node-config-input-fixed" style="display: inline-block; width: auto; vertical-align: top;">
+  </div>
+  <div class="form-row">
+    <div id="deviceMap" style="min-height: 250px;"></div>
+  </div>
 </script>
 
 <script type="text/javascript">
+  var map, marker
+  var mapApi = false
+  var VANCOUVER = {lat: 49.269801, lng: -123.109489}
+  var ZOOM = 8
+  var GOOGLE_MAP = "https://maps.googleapis.com/maps/api/js?key=AIzaSyAbExJS6K6Dr6JeN79ZwP9V7fnk7o6Szqs"
+
   RED.nodes.registerType('nodered-credentials',{
     category: 'config',
     defaults: {
-      deviceId: {type: "text", required:false}
+      deviceId: {type: "text", required:false},
+      location: {required: false},
+      fixed: {required: false}
     },
     credentials: {
-      username: {type: "text", required:true},
-      password: {type: "text", required:true}
+      username: {type: "text", required:false},
+      password: {type: "text", required:false}
     },
     label: function() {
       return "local NodeRED";
     },
-  });
+    oneditsave: function(){
+      this.fixed = this.location ? true : false
+      $("#node-config-input-fixed").prop('checked', this.fixed)
+    },
+    oneditprepare: function(){
+      var thisNode = this
+
+      $("#deviceMap").hide()
+      $("#node-config-input-fixed").change(function() {
+        this.checked ? $("#deviceMap").show() : $("#deviceMap").hide()
+        if (mapApi && map && this.checked){
+          google.maps.event.trigger(map, 'resize')
+        }
+        if (!this.checked){
+          thisNode.location = null
+        }
+      })
+
+      function showMap(){
+        map = new google.maps.Map(document.getElementById('deviceMap'), {
+            center: VANCOUVER, 
+            zoom: ZOOM
+          })
+
+        if (marker){
+          marker.setMap(null)
+        }
+
+        if (thisNode.location){
+          marker = new google.maps.Marker({
+            position: thisNode.location,
+            map: map
+          })
+        }
+
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(function (position) {
+            var initialLocation = new google.maps.LatLng(position.coords.latitude, position.coords.longitude)
+            map.setCenter(initialLocation)
+          })
+        }
+
+        google.maps.event.addListener(map, 'click', function(event) {
+          if (marker){
+            marker.setMap(null)
+          }
+          marker = new google.maps.Marker({
+            position: event.latLng,
+            map: map
+          })
+          thisNode.location = {lat: event.latLng.lat(), lng: event.latLng.lng()}
+        })
+      }
+
+      if (mapApi){
+        showMap()
+        return
+      }
+
+      $.getScript( GOOGLE_MAP )
+      .done(function( script, textStatus ) {
+        mapApi = true
+        showMap()
+      })
+      .fail(function( jqxhr, settings, exception ) {
+        console.log("cannot fetch Google Map API "+ exception)
+      })
+    }
+  })
+  
   RED.nodes.registerType('operator-credentials',{
     category: 'config',
     credentials: {
@@ -78,7 +162,7 @@
   RED.nodes.registerType('dnr-daemon',{
       category: 'Distributed NR',
       defaults: {
-        nodered: {type:"nodered-credentials",required:false},
+        nodered: {type:"nodered-credentials",required:true},
         operatorUrl: {type:"text",required:true},
         operatorToken: {type:"operator-credentials", required:false}
       },
@@ -91,30 +175,8 @@
       labelStyle: function() {
           return "node_label_italic";
       }
-      // button: {
-      //   onclick: function() {
-      //     var node = this;
-      //     $.ajax({
-      //       url: "dnr_daemon/"+this.id,
-      //       type:"POST",
-      //       success: function(resp) {
-      //           RED.notify(node._("success"),"success");
-      //       },
-      //       error: function(jqXHR,textStatus,errorThrown) {
-      //           if (jqXHR.status == 404) {
-      //               RED.notify(node._("common.notification.error",{message:node._("common.notification.errors.not-deployed")}),"error");
-      //           } else if (jqXHR.status == 500) {
-      //               RED.notify(node._("common.notification.error",{message:node._("dnr_daemon.errors.failed")}),"error");
-      //           } else if (jqXHR.status == 0) {
-      //               RED.notify(node._("common.notification.error",{message:node._("common.notification.errors.no-response")}),"error");
-      //           } else {
-      //               RED.notify(node._("common.notification.error",{message:node._("common.notification.errors.unexpected",{status:jqXHR.status,message:textStatus})}),"error");
-      //           }
-      //         }
-      //     });
-      //   }
-      // }
   });
+
 </script>
 
 

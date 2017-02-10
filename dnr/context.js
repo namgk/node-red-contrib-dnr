@@ -23,23 +23,34 @@ var CONTEXT_SNAPSHOT = 5000
 
 function Context(){
   this.device = null 
-  setInterval((function(context){
+  this.cores = os.cpus().length
+
+  this.timer = setInterval((function(context){
     return function(){
       context.snapshot.call(context)
     }
   })(this), CONTEXT_SNAPSHOT)
 }
 
+Context.prototype.destroy = function() {
+  clearInterval(this.timer)
+  delete this.device
+  delete this.cores
+  delete this.freeMem
+  delete this.location
+}
+
 Context.prototype.setLocalNR = function(localNR) {
   this.device = localNR.deviceId
-  this.cores = os.cpus().length
+  if (localNR.location){
+    this.location = localNR.location
+  }
 }
 
 Context.prototype.snapshot = function() {
-  let location = {}
-  let freeMem = 0
+  let location = null
   // snapshoting
-  this.location = location
+  this.location = location || this.location
   this.freeMem = os.freemem()/1000000 // bytes to MB
 }
 

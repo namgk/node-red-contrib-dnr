@@ -71,8 +71,8 @@ module.exports = function(RED) {
     var flowsApi = null
     var auth = new Auth(
       getListenPath(RED.settings), 
-      localNR? localNR.username : '',
-      localNR? localNR.password : ''
+      localNR.username,
+      localNR.password
     )
 
     auth.probeAuth().then(r=>{
@@ -87,6 +87,8 @@ module.exports = function(RED) {
 
     this.on("close",function() {
       active = false
+      context.destroy()
+      clearInterval(this.heartbeatTicker)
       if (ws){
         ws.close()
       }
@@ -134,7 +136,7 @@ module.exports = function(RED) {
 
     this.connectWS()
 
-    setInterval((function(node){
+    this.heartbeatTicker = setInterval((function(node){
       return function(){
         node.heartbeat.call(node)
       }
@@ -150,6 +152,8 @@ module.exports = function(RED) {
         gatewayNode.heartbeat()
       }
     }
+
+    console.log(this.getContext().query())
 
     if (this.isWsAlive() && this.isRegistered()){
       this.getWs().send(JSON.stringify({
@@ -246,7 +250,7 @@ module.exports = function(RED) {
         }
 
         if (msg.topic === TOPIC_DNR_SYN_RESS){
-          let resps = msg.dnrSyncRess
+          let resps = msg.dnrSync
           for (let resp of resps){
             let dnrSyncReq = resp.dnrSyncReq
             let dnrSyncRes = resp.dnrSyncRes
@@ -296,6 +300,7 @@ module.exports = function(RED) {
   function NodeRedCredentialsNode(n) {
     RED.nodes.createNode(this,n);
     this.deviceId = n.deviceId
+    this.location = n.location
 
     if (this.credentials) {
       this.username = this.credentials.username;
