@@ -199,54 +199,78 @@ module.exports = function(RED) {
         }
 
         if (msg.topic === TOPIC_FLOW_DEPLOYED){
-          var activeFlow = msg.data.activeFlow
-          var masterFlows = msg.data.allFlows
+          let activeFlow = msg.data.activeFlow
+          let masterFlows = msg.data.allFlows
+          let globalFlow = msg.data.globalFlow
 
-          // mapping between flow label and id
-          // distinguishing between dnr flows and normal flows
-          activeFlow.label = 'dnr_' + activeFlow.id
+          let dnrizedFlow = Dnr.dnrize(activeFlow)
+          // hook to daemon from each dnr gateway
+          for (let n of dnrizedFlow.nodes){
+            if (n.type === 'dnr-gateway'){
+              n.config.daemon = node.id 
+              break
+            }
+          }
 
-          node.getFlowApi().getAllFlow()
+          let toBeUpdated = null
+          let toBeDeleted = []
+
+          // updating global flow that holds shared configs and subflows
+          node.getFlowApi().getFlow('global')
+          .then((localGlobalFlow)=>{
+            localGlobalFlow = JSON.parse(localGlobalFlow)
+            for (let gc of globalFlow.configs){
+              let exist = false
+              for (let c of localGlobalFlow.configs){
+                if (c.id === gc.id){
+                  exist = true
+                  c = gc
+                  break
+                }
+              }
+              if (!exist){
+                localGlobalFlow.configs.push(gc)
+              }
+            }
+            return node.getFlowApi().updateFlow('global', JSON.stringify(localGlobalFlow))
+          })
+          // getting local flows to be updated or deleted
+          .then(()=>{
+            return node.getFlowApi().getFlows()
+          })
           .then(flows=>{
             flows = JSON.parse(flows)
+
             for (var i = 0; i<flows.length; i++){
-              if (flows[i].type !== 'tab'){
+              if (!flows[i].label || !flows[i].label.startsWith('dnr_')){
                 continue
               }
 
-              // sync local flows with master flows: we
-              // want to remove local flows that have been deleted
-              // on master flows.
+              let actualFlowId = flows[i].label.replace('dnr_','')
 
-              // TODO: seems like a node-red bug, cannot delete
-              // multiple flows concurrently!!
-              // Same thing applies to installing
-              // uncomment the following block when resolved
-
-              // if (masterFlows.indexOf(flows[i].label.replace('dnr_','')) == -1 && 
-              //     flows[i].label !== 'DNR Seed' &&
-              //     flows[i].label.indexOf('dnr_') == 0){
-              //   node.flowsApi.uninstallFlow(flows[i].id)
-              //   continue
-              // }
-
-              // to update local flow: uninstall it first and reinstall 
-              // with remote version
-              if (flows[i].label.replace('dnr_','') === activeFlow.id){
-                return node.getFlowApi().uninstallFlow(flows[i].id)
+              // sync local flows with master flows
+              if (masterFlows.indexOf(actualFlowId) == -1){
+                toBeDeleted.push(node.getFlowApi().uninstallFlow(flows[i].id))
+              } else if (actualFlowId === activeFlow.id){
+                toBeUpdated = flows[i].id
               }
             }
           })
           .then(()=>{
-            let dnrizedFlow = Dnr.dnrize(activeFlow)
-            for (let n of dnrizedFlow.nodes){
-              if (n.type === 'dnr-gateway'){
-                n.config.daemon = node.id
-                break
-              }
+            if (toBeUpdated){
+              return node.getFlowApi().updateFlow(toBeUpdated, JSON.stringify(dnrizedFlow))
+            } else {
+              return node.getFlowApi().installFlow(JSON.stringify(dnrizedFlow))
             }
-            node.getFlowApi().installFlow(JSON.stringify(dnrizedFlow))
           })
+          .then(()=>{
+            // Node-RED bug: cannot concurrently delete flows
+            // if (toBeDeleted.length > 0){
+            //   return toBeDeleted.reduce(function(cur, next){
+            //     return cur.then(next)
+            //   })
+            // }
+          }).catch(node.error)
         }
 
         if (msg.topic === TOPIC_DNR_SYN_RESS){
@@ -265,7 +289,6 @@ module.exports = function(RED) {
         }
       } catch (err){
         node.error(err)
-        return
       }
     })
 
