@@ -75,16 +75,6 @@ module.exports = function(RED) {
       localNR.password
     )
 
-    auth.probeAuth().then(r=>{
-      flowsApi = new FlowsAPI(auth)
-    }).catch(function(e){
-      auth.auth().then(r=>{
-        flowsApi = new FlowsAPI(auth)
-      }).catch(e=>{
-        throw 'cannot authenticate with local Node RED ' + e
-      })
-    })
-
     this.on("close",function() {
       active = false
       context.destroy()
@@ -134,13 +124,25 @@ module.exports = function(RED) {
       registered = r
     }
 
-    this.connectWS()
+    let that = this
+    auth.probeAuth()
+    .catch(function(e){
+      return auth.auth()
+    })
+    .then(r=>{
+      flowsApi = new FlowsAPI(auth)
+      that.connectWS()
+      that.heartbeat()
+      that.heartbeatTicker = setInterval((function(self){
+        return function(){
+          self.heartbeat.call(self)
+        }
+      })(that), OPERATOR_HEARTBEAT)
+    })
+    .catch(e=>{
+      throw 'cannot authenticate with local Node RED ' + e
+    })
 
-    this.heartbeatTicker = setInterval((function(node){
-      return function(){
-        node.heartbeat.call(node)
-      }
-    })(this), OPERATOR_HEARTBEAT)
   }
 
   DnrDaemonNode.prototype.heartbeat = function() {
@@ -163,6 +165,21 @@ module.exports = function(RED) {
         dnrSyncReqs: this.dnrSyncReqs
       }))
     }
+
+    // update the list of installed node types
+    this.getFlowApi().getNodes()
+    .then(function(nodes){
+      nodes = JSON.parse(nodes)
+
+      let localNodeTypes = []
+      for (let n of nodes){
+        let nTypes = n.types
+        localNodeTypes = localNodeTypes.concat(n.types)
+      }
+
+      this.getLocalNR().localNodeTypes = localNodeTypes
+    }.bind(this))
+    .catch(e=>this.error(JSON.stringify(e)))
   }
 
   DnrDaemonNode.prototype.connectWS = function() {
@@ -203,6 +220,19 @@ module.exports = function(RED) {
           let masterFlows = msg.data.allFlows
           let globalFlow = msg.data.globalFlow
 
+          // TODO: deal with unknown node types
+          // should replace unknown node types with dnr nodes
+          // let missingTypeNodes = []
+          for (let n of activeFlow.nodes){
+            if (!node.getLocalNR().localNodeTypes.includes(n.type)){
+              node.log('adding placeholder node for missing type: ' + n.type)
+              n.replaceFor = n.type
+              n.type = 'dnr-placeholder'
+              n.outputs = n.wires.length
+              n.constraints = {'no-run':{id: 'no-run', cores:999999}}
+            }
+          }
+
           let dnrizedFlow = Dnr.dnrize(activeFlow)
           // hook to daemon from each dnr gateway
           for (let n of dnrizedFlow.nodes){
@@ -219,6 +249,8 @@ module.exports = function(RED) {
           node.getFlowApi().getFlow('global')
           .then((localGlobalFlow)=>{
             localGlobalFlow = JSON.parse(localGlobalFlow)
+            let oldLen = localGlobalFlow.configs.length
+
             for (let gc of globalFlow.configs){
               let exist = false
               for (let c of localGlobalFlow.configs){
@@ -232,7 +264,10 @@ module.exports = function(RED) {
                 localGlobalFlow.configs.push(gc)
               }
             }
-            return node.getFlowApi().updateFlow('global', JSON.stringify(localGlobalFlow))
+
+            if (oldLen !== localGlobalFlow.configs.length){
+              return node.getFlowApi().updateFlow('global', JSON.stringify(localGlobalFlow))
+            }
           })
           // getting local flows to be updated or deleted
           .then(()=>{

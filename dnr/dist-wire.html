@@ -50,7 +50,19 @@
     category: 'config',
     defaults: {
         config: {value:{}}
+    }
+  });
+
+  RED.nodes.registerType('dnr-placeholder',{
+    category: 'Distributed NR',
+    defaults: {
+        replaceFor: {value:''}
     },
+    color:"#d8bfd8",
+    label: function() {
+      return ':::'+this.replaceFor+':::';
+    },
+    inputs:1
   });
   
   var changeWidth = function(){

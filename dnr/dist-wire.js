@@ -281,6 +281,12 @@ module.exports = function(RED) {
     }
   }
 
+  function DnrPlaceholderNode(n){
+    RED.nodes.createNode(this,n)
+    this.replaceFor = n.replaceFor
+  }
+
   RED.nodes.registerType("dnr-gateway", DnrGatewayNode, {});
+  RED.nodes.registerType("dnr-placeholder", DnrPlaceholderNode);
   RED.nodes.registerType("dnr", DnrNode);
 }

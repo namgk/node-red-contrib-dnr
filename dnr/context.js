@@ -24,6 +24,7 @@ var CONTEXT_SNAPSHOT = 5000
 function Context(){
   this.device = null 
   this.cores = os.cpus().length
+  this.freeMem = os.freemem()/1000000
 
   this.timer = setInterval((function(context){
     return function(){
