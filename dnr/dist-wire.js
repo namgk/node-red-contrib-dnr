@@ -242,9 +242,9 @@ module.exports = function(RED) {
       this.broker.updateEndpoint(brokers[0])// TODO, we have a list of brokers
     } else {
       let path = this.daemon.getOperatorUrl() + 
-        (this.getOperatorUrl().slice(-1) == "/"?"":"/") + 
+        (this.daemon.getOperatorUrl().slice(-1) == "/"?"":"/") + 
         "mqttws"
-      this.broker.updateEndpoint(this.daemon.getOperatorUrl())
+      this.broker.updateEndpoint(path)
     }
 
     for (let link in dnrLinks){

@@ -22,7 +22,7 @@ var os = require('os')
 var CONTEXT_SNAPSHOT = 5000
 
 function Context(){
-  this.device = null 
+  this.deviceId = null 
   this.cores = os.cpus().length
   this.freeMem = os.freemem()/1000000
 
@@ -35,14 +35,14 @@ function Context(){
 
 Context.prototype.destroy = function() {
   clearInterval(this.timer)
-  delete this.device
+  delete this.deviceId
   delete this.cores
   delete this.freeMem
   delete this.location
 }
 
 Context.prototype.setLocalNR = function(localNR) {
-  this.device = localNR.deviceId
+  this.deviceId = localNR.deviceId
   if (localNR.location){
     this.location = localNR.location
   }

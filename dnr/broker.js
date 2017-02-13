@@ -18,8 +18,12 @@ Broker.prototype.connect = function() {
     broker.client.end()
   }
 
-  broker.client = mqtt.connect(broker.endpoint)
+  broker.client = mqtt.connect(broker.endpoint.replace('https://', 'wss://').replace('http://','ws://'))
+  // broker.client.on('connect', function (c) {
+  //   console.log('broker connected')
+  // })
   broker.client.on('message', function (topic, message) {
+    message = message.toString()
     for (let k in broker.subscription){
       if (broker.subscription[k].topic === topic){
         broker.subscription[k].cb(message)
@@ -38,6 +42,13 @@ Broker.prototype.updateEndpoint = function(newBroker) {
 }
 
 Broker.prototype.subscribe = function(subscriber, topic, cb) {
+  let that = this
+  if (!this.client.connected){
+    setTimeout(function(){
+      that.subscribe(subscriber, topic, cb)
+    }, 2000)
+    return
+  }
 	if (this.subscription[subscriber]) {
     // updating old topic
     let oldTopic = this.subscription[subscriber].topic
@@ -81,7 +92,7 @@ Broker.prototype.unsubscribe = function(subscriber) {
 }
 
 Broker.prototype.publish = function(publisher, topic, msg) {
-	this.client.publish(topic, msg)
+  this.client.publish(topic, msg)
 }
 
 module.exports = Broker

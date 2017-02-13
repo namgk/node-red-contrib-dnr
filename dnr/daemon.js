@@ -155,8 +155,6 @@ module.exports = function(RED) {
       }
     }
 
-    console.log(this.getContext().query())
-
     if (this.isWsAlive() && this.isRegistered()){
       this.getWs().send(JSON.stringify({
         topic:TOPIC_DNR_HB, 
@@ -187,8 +185,6 @@ module.exports = function(RED) {
       (this.getOperatorUrl().slice(-1) == "/"?"":"/") + 
       "dnr"
 
-    this.log(path)
-
     this.setWs(new WebSocket(path))
     var ws = this.getWs()
 
@@ -205,7 +201,7 @@ module.exports = function(RED) {
 
     ws.on('message', function(msg) {
       try {
-        node.log(msg)
+        // node.log(msg)
         msg = JSON.parse(msg)
 
         if (msg.topic === TOPIC_REGISTER_ACK){
@@ -240,7 +236,9 @@ module.exports = function(RED) {
           for (let n of dnrizedFlow.nodes){
             if (n.type === 'dnr-gateway'){
               n.config.daemon = node.id
-              n.config.brokerEndpoint = node.getOperatorUrl()
+              n.config.brokerEndpoint = node.getOperatorUrl() + 
+                (this.getOperatorUrl().slice(-1) == "/"?"":"/") + 
+                "mqttws"
               break
             }
           }
