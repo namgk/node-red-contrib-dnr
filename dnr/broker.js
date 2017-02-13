@@ -6,13 +6,19 @@ function Broker(config){
   var broker = this
   broker.subscription = {} //  subscriber, topic, callback
   broker.topics = {}
+  broker.endpoint = config.brokerEndpoint
 
-  broker.client  = mqtt.connect('mqtt://localhost')
-  broker.client.on('connect', function () {
-    // client.subscribe('presence')
-    // client.publish('presence', 'Hello mqtt')
-  })
+  this.connect()
+}
 
+Broker.prototype.connect = function() {
+  var broker = this
+
+  if (broker.client && broker.client.connected){
+    broker.client.end()
+  }
+
+  broker.client = mqtt.connect(broker.endpoint)
   broker.client.on('message', function (topic, message) {
     for (let k in broker.subscription){
       if (broker.subscription[k].topic === topic){
@@ -20,6 +26,15 @@ function Broker(config){
       }
     }
   })
+}
+
+Broker.prototype.updateEndpoint = function(newBroker) {
+  if (this.endpoint === newBroker){
+    return
+  }
+
+  this.endpoint = newBroker
+  this.connect()
 }
 
 Broker.prototype.subscribe = function(subscriber, topic, cb) {
@@ -63,10 +78,10 @@ Broker.prototype.unsubscribe = function(subscriber) {
       delete this.subscription[k]
     }
   }
-};
+}
 
 Broker.prototype.publish = function(publisher, topic, msg) {
 	this.client.publish(topic, msg)
-};
+}
 
 module.exports = Broker

@@ -14,9 +14,9 @@
  * limitations under the License.
  **/
 
-var utils = require("./utils");
-var Broker = require('./broker');
-var request = require("request-promise-native");
+var utils = require("./utils")
+var Broker = require('./broker')
+var request = require("request-promise-native")
 var dnrInterface = require('dnr-interface')
 var ctxConstant = dnrInterface.Context
 var DnrSyncRes = dnrInterface.DnrSyncRes
@@ -237,6 +237,15 @@ module.exports = function(RED) {
   */
   DnrGatewayNode.prototype.processSyncRes = function(response) {
     let dnrLinks = response.dnrLinks
+    let brokers = response.brokers
+    if (brokers.length > 0){
+      this.broker.updateEndpoint(brokers[0])// TODO, we have a list of brokers
+    } else {
+      let path = this.daemon.getOperatorUrl() + 
+        (this.getOperatorUrl().slice(-1) == "/"?"":"/") + 
+        "mqttws"
+      this.broker.updateEndpoint(this.daemon.getOperatorUrl())
+    }
 
     for (let link in dnrLinks){
       // link: <src node Id>_<outport>_<dest node Id>

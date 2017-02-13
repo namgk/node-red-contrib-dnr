@@ -187,6 +187,8 @@ module.exports = function(RED) {
       (this.getOperatorUrl().slice(-1) == "/"?"":"/") + 
       "dnr"
 
+    this.log(path)
+
     this.setWs(new WebSocket(path))
     var ws = this.getWs()
 
@@ -237,7 +239,8 @@ module.exports = function(RED) {
           // hook to daemon from each dnr gateway
           for (let n of dnrizedFlow.nodes){
             if (n.type === 'dnr-gateway'){
-              n.config.daemon = node.id 
+              n.config.daemon = node.id
+              n.config.brokerEndpoint = node.getOperatorUrl()
               break
             }
           }

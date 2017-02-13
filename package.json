@@ -1,6 +1,6 @@
 {
   "name": "node-red-contrib-dnr",
-  "version": "2.2.4",
+  "version": "2.3.4",
   "description": "special node used in distributed node red",
   "main": "index.js",
   "scripts": {
