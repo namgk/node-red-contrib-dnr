@@ -237,7 +237,7 @@ module.exports = function(RED) {
             if (n.type === 'dnr-gateway'){
               n.config.daemon = node.id
               n.config.brokerEndpoint = node.getOperatorUrl() + 
-                (this.getOperatorUrl().slice(-1) == "/"?"":"/") + 
+                (node.getOperatorUrl().slice(-1) == "/"?"":"/") + 
                 "mqttws"
               break
             }
