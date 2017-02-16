@@ -218,6 +218,7 @@ module.exports = function(RED) {
     // update with coordinator/requesting topics for dnrlinks
     if (Object.keys(this.dnrLinksToRequest).length === 0 && 
         Object.keys(this.nodesToContribute).length === 0){
+      delete this.daemon.dnrSyncReqs[this.flow.id]
       return
     }
     this.daemon.dnrSyncReqs[this.flow.id] = new dnrInterface.DnrSyncReq(

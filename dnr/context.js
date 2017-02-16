@@ -93,7 +93,11 @@ Context.prototype.satisfying = function(constraints) {
       }
 
       if (cElement === 'location'){
-        continue // not implemented
+        if (!this.location){
+          return false
+        }
+        let locationConstraint = JSON.parse(constraints[cid][cElement])
+        return utils.geoInclude(this.location, locationConstraint)
       }
 
       if (cElement === 'memory' && 
@@ -104,7 +108,7 @@ Context.prototype.satisfying = function(constraints) {
   }
 
   return true
-};
+}
 
 /*
   need to decide how this dnr node should behave.

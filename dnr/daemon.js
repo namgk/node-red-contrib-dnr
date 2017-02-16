@@ -131,8 +131,20 @@ module.exports = function(RED) {
     })
     .then(r=>{
       flowsApi = new FlowsAPI(auth)
+      return flowsApi.getNodes()
+    })
+    .then((nodes)=>{
+      nodes = JSON.parse(nodes)
+
+      let localNodeTypes = []
+      for (let n of nodes){
+        let nTypes = n.types
+        localNodeTypes = localNodeTypes.concat(n.types)
+      }
+
+      localNR.localNodeTypes = localNodeTypes
+
       that.connectWS()
-      that.heartbeat()
       that.heartbeatTicker = setInterval((function(self){
         return function(){
           self.heartbeat.call(self)
