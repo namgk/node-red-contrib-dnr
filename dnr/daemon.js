@@ -244,12 +244,14 @@ module.exports = function(RED) {
           }
 
           // and config nodes as well
-          let cIndex = activeFlow.configs.length
-          while(cIndex--){
-            let configNode = activeFlow.configs[cIndex]
-            if (!node.getLocalNR().localNodeTypes.includes(configNode.type)){
-              node.log('removing config node whose type is missing: ' + configNode.type)
-              activeFlow.configs.splice(cIndex, 1)
+          if (activeFlow.configs){
+            let cIndex = activeFlow.configs.length
+            while(cIndex--){
+              let configNode = activeFlow.configs[cIndex]
+              if (!node.getLocalNR().localNodeTypes.includes(configNode.type)){
+                node.log('removing config node whose type is missing: ' + configNode.type)
+                activeFlow.configs.splice(cIndex, 1)
+              }
             }
           }
 
