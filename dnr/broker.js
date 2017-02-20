@@ -59,7 +59,7 @@ Broker.prototype.subscribe = function(subscriber, topic, cb) {
     if (this.topics[oldTopic]){
       this.topics[oldTopic]--
     }
-    if (this.topic[oldTopic] <= 0){
+    if (this.topics[oldTopic] <= 0){
       this.client.unsubscribe(oldTopic)
     }
   }
