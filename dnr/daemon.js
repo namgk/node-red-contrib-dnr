@@ -167,6 +167,9 @@ module.exports = function(RED) {
       }
     }
 
+    this.log('me - ' + this.getLocalNR().deviceId)
+    this.log('alive? ' + this.isWsAlive() + ', ' + 'registered? ' + this.isRegistered())
+
     if (this.isWsAlive() && this.isRegistered()){
       this.getWs().send(JSON.stringify({
         topic:TOPIC_DNR_HB, 
