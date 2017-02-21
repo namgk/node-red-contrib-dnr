@@ -170,7 +170,7 @@ module.exports = function(RED) {
     if (this.isWsAlive() && this.isRegistered()){
       this.getWs().send(JSON.stringify({
         topic:TOPIC_DNR_HB, 
-        device: this.getLocalNR().deviceId,
+        deviceId: this.getLocalNR().deviceId,
         context: this.getContext().query(),
         dnrSyncReqs: this.dnrSyncReqs
       }))
@@ -192,6 +192,29 @@ module.exports = function(RED) {
     .catch(e=>this.error(JSON.stringify(e)))
   }
 
+  DnrDaemonNode.prototype.processUnknownNodes = function(activeFlow) {
+    for (let n of activeFlow.nodes){
+      if (!this.getLocalNR().localNodeTypes.includes(n.type)){
+        this.log('adding placeholder node for missing type: ' + n.type)
+        n.replaceFor = n.type
+        n.type = 'dnr-placeholder'
+        n.outputs = n.wires.length
+        n.constraints = {'no-run':{id: 'no-run', cores:999999}}
+      }
+    }
+
+    if (activeFlow.configs){
+      let cIndex = activeFlow.configs.length
+      while(cIndex--){
+        let n = activeFlow.configs[cIndex]
+        if (!this.getLocalNR().localNodeTypes.includes(n.type)){
+          this.log('removing config node whose type is missing: ' + n.type)
+          activeFlow.configs.splice(cIndex, 1)
+        }
+      }
+    }
+  }
+
   DnrDaemonNode.prototype.connectWS = function() {
     let path = this.getOperatorUrl() + 
       (this.getOperatorUrl().slice(-1) == "/"?"":"/") + 
@@ -206,8 +229,8 @@ module.exports = function(RED) {
       node.setWsAlive(true)
 
       ws.send(JSON.stringify({
-        'topic':'register', 
-        'device': node.getLocalNR().deviceId || utils.generateId()
+        'topic':TOPIC_REGISTER, 
+        'deviceId': node.getLocalNR().deviceId || utils.generateId()
       }))
     })
 
@@ -230,30 +253,7 @@ module.exports = function(RED) {
           let masterFlows = msg.data.allFlows
           let globalFlow = msg.data.globalFlow
 
-          // TODO: deal with unknown node types
-          // should replace unknown node types with dnr nodes
-          // let missingTypeNodes = []
-          for (let n of activeFlow.nodes){
-            if (!node.getLocalNR().localNodeTypes.includes(n.type)){
-              node.log('adding placeholder node for missing type: ' + n.type)
-              n.replaceFor = n.type
-              n.type = 'dnr-placeholder'
-              n.outputs = n.wires.length
-              n.constraints = {'no-run':{id: 'no-run', cores:999999}}
-            }
-          }
-
-          // and config nodes as well
-          if (activeFlow.configs){
-            let cIndex = activeFlow.configs.length
-            while(cIndex--){
-              let configNode = activeFlow.configs[cIndex]
-              if (!node.getLocalNR().localNodeTypes.includes(configNode.type)){
-                node.log('removing config node whose type is missing: ' + configNode.type)
-                activeFlow.configs.splice(cIndex, 1)
-              }
-            }
-          }
+          node.processUnknownNodes(activeFlow)
 
           let dnrizedFlow = Dnr.dnrize(activeFlow)
           // hook to daemon from each dnr gateway
@@ -390,7 +390,6 @@ module.exports = function(RED) {
       this.password = this.credentials.password;
     }
   }
-
   function OperatorCredentialsNode(n) {
     RED.nodes.createNode(this,n);
 
@@ -398,34 +397,16 @@ module.exports = function(RED) {
       this.token = this.credentials.token;
     }
   }
-
-  RED.nodes.registerType("dnr-daemon", DnrDaemonNode, {});
-
+  RED.nodes.registerType("dnr-daemon", DnrDaemonNode, {})
   RED.nodes.registerType("nodered-credentials", NodeRedCredentialsNode, {
     credentials: {
       username: {type:"text"},
       password: {type:"password"}
     }
-  });
-
+  })
   RED.nodes.registerType("operator-credentials", OperatorCredentialsNode, {
     credentials: {
       token: {type:"text"}
     }
-  });
-
-  // RED.httpAdmin.post("/dnr_daemon/:id", RED.auth.needsPermission("dnrdaemon.trigger"), function(req,res) {
-  //   var node = RED.nodes.getNode(req.params.id);
-  //   if (node != null) {
-  //     try {
-  //         node.receive({payload:'test daemon'});
-  //         res.sendStatus(200);
-  //     } catch(err) {
-  //         res.sendStatus(500);
-  //         node.error(RED._("dnr_daemon.failed",{error:err.toString()}));
-  //     }
-  //   } else {
-  //       res.sendStatus(404);
-  //   }
-  // });
+  })
 }

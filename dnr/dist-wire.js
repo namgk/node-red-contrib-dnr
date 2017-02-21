@@ -94,7 +94,6 @@ module.exports = function(RED) {
     this.daemon.flowGateway[this.flow.id] = this.id
 
     this.context = this.daemon.getContext()
-    this.deviceId = this.daemon.getLocalNR().deviceId
     this.flowCoordinator = this.daemon.getOperatorUrl()// TODO: should get this from flow meta-data
     this.dnrLinksToRequest = {}
     this.nodesToContribute = {}
@@ -114,7 +113,7 @@ module.exports = function(RED) {
   // to be triggered by daemon node
   DnrGatewayNode.prototype.heartbeat = function() {
     // TODO: should we??? device not registered
-    if (!this.deviceId){
+    if (!this.daemon.getLocalNR().deviceId){
       return
     }
 
@@ -198,11 +197,11 @@ module.exports = function(RED) {
       // in short: if inactive node is on the 1 side, it needs to ask coordinator
       //           if inactive node is on the N side, it uses itself
       if (dnrNode.linkType === 'N1' && state === ctxConstant.FETCH_FORWARD){
-        dnrNode.resubscribe('to_' + this.deviceId + '_'  + k)
+        dnrNode.resubscribe('to_' + this.daemon.getLocalNR().deviceId + '_'  + k)
       }
 
       if (dnrNode.linkType === '1N' && state === ctxConstant.RECEIVE_REDIRECT){
-        dnrNode.publishTopic = 'from_' + this.deviceId + '_' + k
+        dnrNode.publishTopic = 'from_' + this.daemon.getLocalNR().deviceId + '_' + k
       }
 
       if ((dnrNode.linkType === '1N' && state === ctxConstant.FETCH_FORWARD) ||
@@ -222,7 +221,7 @@ module.exports = function(RED) {
       return
     }
     this.daemon.dnrSyncReqs[this.flow.id] = new dnrInterface.DnrSyncReq(
-      this.deviceId, this.flow.id, 
+      this.daemon.getLocalNR().deviceId, this.flow.id, 
       Object.keys(this.dnrLinksToRequest),
       Object.keys(this.nodesToContribute)
     )
@@ -253,14 +252,16 @@ module.exports = function(RED) {
       // get the DNR node for this link
       let dnrNode = this.dnrNodesMap[link]
       if (!dnrNode){
+        log.warn('receive a dnrlink response that does not exist - ' + link)
         continue
       }
 
+      let commTopic = dnrLinks[link]
       // update its comm topics
       if (dnrNode.state === ctxConstant.FETCH_FORWARD){
-        dnrNode.resubscribe(dnrLinks[link])
+        dnrNode.resubscribe(commTopic])
       } else if (dnrNode.state === ctxConstant.RECEIVE_REDIRECT){
-        dnrNode.publishTopic = dnrLinks[link]
+        dnrNode.publishTopic = commTopic
       }
 
       dnrNode.stateUpdate(dnrNode.state)
@@ -285,9 +286,6 @@ module.exports = function(RED) {
           this.broker.publish(dnrNode, dnrNode.publishTopic, JSON.stringify(msg))
         }
         break;
-      // skipping DROP context here
-      // in case of FETCH_FORWARD, it won't receive 'input' event
-      //   as it gets message from external nodes via subscription
     }
   }
 
