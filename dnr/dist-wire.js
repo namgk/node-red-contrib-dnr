@@ -259,7 +259,7 @@ module.exports = function(RED) {
       let commTopic = dnrLinks[link]
       // update its comm topics
       if (dnrNode.state === ctxConstant.FETCH_FORWARD){
-        dnrNode.resubscribe(commTopic])
+        dnrNode.resubscribe(commTopic)
       } else if (dnrNode.state === ctxConstant.RECEIVE_REDIRECT){
         dnrNode.publishTopic = commTopic
       }
