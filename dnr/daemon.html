@@ -47,8 +47,8 @@
     <input type="password" id="node-config-input-password">
   </div>
   <div class="form-row">
-    <label for="node-config-input-deviceId"><i class="fa"></i>Device Id</label>
-    <input type="text" id="node-config-input-deviceId">
+    <label for="node-config-input-deviceName"><i class="fa"></i>Device Name</label>
+    <input type="text" id="node-config-input-deviceName">
   </div>
   <div class="form-row">
     <label>Location fixed?</label>
@@ -69,7 +69,7 @@
   RED.nodes.registerType('nodered-credentials',{
     category: 'config',
     defaults: {
-      deviceId: {type: "text", required:false},
+      deviceName: {type: "text", required:false},
       location: {required: false},
       fixed: {required: false}
     },
