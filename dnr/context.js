@@ -23,6 +23,7 @@ var CONTEXT_SNAPSHOT = 5000
 
 function Context(){
   this.deviceId = null 
+  this.deviceName = null 
   this.cores = os.cpus().length
   this.freeMem = os.freemem()/1000000
 
@@ -36,6 +37,7 @@ function Context(){
 Context.prototype.destroy = function() {
   clearInterval(this.timer)
   delete this.deviceId
+  delete this.deviceName
   delete this.cores
   delete this.freeMem
   delete this.location
@@ -43,6 +45,7 @@ Context.prototype.destroy = function() {
 
 Context.prototype.setLocalNR = function(localNR) {
   this.deviceId = localNR.deviceId
+  this.deviceName = localNR.deviceName
   if (localNR.location){
     this.location = localNR.location
   }
@@ -78,9 +81,9 @@ Context.prototype.satisfying = function(constraints) {
         continue
       }
 
-      if (cElement === 'deviceId'){
-        if (!this.deviceId ||
-            this.deviceId !== constraints[cid][cElement]){
+      if (cElement === 'deviceName'){
+        if (!this.deviceName ||
+            this.deviceName !== constraints[cid][cElement]){
           return false
         }
       }
