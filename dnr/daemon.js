@@ -39,6 +39,7 @@ var STATE_REGISTERED = 3
 var STATE_DISCONNECTING = -1
 var STATE_DISCONNECTED = -2
 var STATE_SERVER_INACTIVE = -3
+var STATE_SERVER_UNREACHABLE = -4
 
 var OPERATOR_HEARTBEAT = 5000
 const OPERATOR_INACTIVE = 15000*3
@@ -202,12 +203,12 @@ module.exports = function(RED) {
         deviceId: this.getLocalNR().deviceId,
         context: this.getContext().query(),
         dnrSyncReqs: this.dnrSyncReqs
-      }), console.log)
-    }
+      }))
 
-    if (this.lastServerHb && Date.now() - this.lastServerHb >= OPERATOR_INACTIVE){
-      this.state = STATE_SERVER_INACTIVE
-      this.reconnect()
+      if (this.lastServerHb && Date.now() - this.lastServerHb >= OPERATOR_INACTIVE){
+        this.state = STATE_SERVER_INACTIVE
+        this.reconnect()
+      }
     }
   }
 
@@ -235,7 +236,10 @@ module.exports = function(RED) {
   }
 
   DnrDaemonNode.prototype.register = function() {
-    if (this.state >= STATE_REGISTERING){
+    if (this.state !== STATE_CONNECTED){
+      return
+    }
+    if (this.getWs().readyState !== 1){
       return
     }
 
@@ -248,19 +252,14 @@ module.exports = function(RED) {
   }
 
   DnrDaemonNode.prototype.connect = function() {
-    if (this.state >= STATE_CONNECTING){
-      return
-    }
-
     let path = this.getOperatorUrl() + 
       (this.getOperatorUrl().slice(-1) == "/"?"":"/") + 
       "dnr"
 
     this.setWs(new WebSocket(path.replace('http://', 'ws://').replace('https://', 'wss://')))
-    this.state = STATE_CONNECTING
 
     var ws = this.getWs()
-
+    this.log('connecting')
     let node = this
     ws.on('open', function() {
       node.setAttempt(0)
@@ -270,6 +269,10 @@ module.exports = function(RED) {
     })
 
     ws.on('message', function(msg) {
+      if (ws.readyState !== 1){
+        return
+      }
+
       node.lastServerHb = Date.now()
       try {
         // node.log(msg)
@@ -390,15 +393,15 @@ module.exports = function(RED) {
       }
     })
 
-    ws.on('close', function(e){
-      node.log('close ' + e)
-      node.state = STATE_DISCONNECTED
-      node.reconnect(true)
+    ws.on('close', function(e,r){
+      node.log('onclose ' + e + ' r: ' + r)
+      node.state = STATE_SERVER_UNREACHABLE
+      node.reconnect()
     })
 
     ws.on('error', function(e){
       node.log('error ' + e)
-      node.state = STATE_DISCONNECTED
+      node.state = STATE_SERVER_UNREACHABLE
       node.reconnect()
     })
 
@@ -421,23 +424,30 @@ module.exports = function(RED) {
     // }
   }
 
-  DnrDaemonNode.prototype.reconnect = function(closed) {
-    if (this.state >= STATE_CONNECTED){
+  DnrDaemonNode.prototype.reconnect = function() {
+    if (this.state !== STATE_SERVER_UNREACHABLE && 
+        this.state !== STATE_SERVER_INACTIVE){
       return
     }
     if (!this.isActive()){
       return
     }
-    if (!closed && this.getWs() && this.getWs().readyState == 1){
+    if (this.getWs()){
+      this.log('closing the old ws')
       this.getWs().close()
-      this.state = STATE_DISCONNECTING
-      return
+      this.setWs(null)
     }
 
     this.setAttempt(this.getAttempt()+1);
-    this.log('reconnecting...')
     let node = this
-    setTimeout(()=>node.connect.call(node),this.getAttempt() < 10 ? 2000 : 60000);
+    node.log('scheduling reconnection...')
+    if (node.reconnectTimer){
+      clearTimeout(node.reconnectTimer)
+    }
+    node.reconnectTimer = setTimeout(function(){
+      node.connect.call(node)
+      node.state = STATE_CONNECTING
+    },this.getAttempt() < 10 ? 2000 : 60000);
   }
 
   function NodeRedCredentialsNode(n) {
