@@ -394,12 +394,18 @@ module.exports = function(RED) {
     })
 
     ws.on('close', function(e,r){
-      node.log('onclose ' + e + ' r: ' + r)
+      if (!node.getWs() || node.getWs().readyState === 1){
+        return
+      }
+      node.log('onclose ' + e + ' r: ' + r + ', readyState: ' + ws.readyState + ', node ws: ' + node.getWs().readyState)
       node.state = STATE_SERVER_UNREACHABLE
       node.reconnect()
     })
 
     ws.on('error', function(e){
+      if (!node.getWs() || node.getWs().readyState === 1){
+        return
+      }
       node.log('error ' + e)
       node.state = STATE_SERVER_UNREACHABLE
       node.reconnect()
