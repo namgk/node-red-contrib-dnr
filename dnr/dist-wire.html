@@ -24,10 +24,11 @@
 </script>
 
 <style type="text/css">
-  .node_label_trojan {}
+  .node_label_anchor {}
 </style>
 
 <script type="text/javascript">
+  var color = "#e5b3c2"
   RED.nodes.registerType('dnr',{
       category: 'Distributed NR',
       defaults: {
@@ -35,14 +36,14 @@
         linkType: {value: ''},
         gateway: {type:"dnr-gateway",required:true},
       },
-      color:"#d8bfd8",
+      color:color,
       inputs:1,
       outputs:1,
       label: function() {
           return "";
       },
       labelStyle: function() {
-          return "node_label_trojan";
+          return "node_label_anchor";
       }
   });
 
@@ -58,15 +59,18 @@
     defaults: {
         replaceFor: {value:''}
     },
-    color:"#d8bfd8",
+    color:color,
     label: function() {
       return ':::'+this.replaceFor+':::';
     },
     inputs:1
   });
+
+  $('#palette_node_dnr').hide()
+  $('#palette_node_dnr-placeholder').hide()
   
   var changeWidth = function(){
-    var dnrLabel = $('.node_label_trojan')
+    var dnrLabel = $('.node_label_anchor')
     dnrLabel.each(function(){
       var g = $(this).parent() 
       var rect = d3.select(g.children()[1])

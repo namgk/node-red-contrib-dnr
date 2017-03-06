@@ -29,9 +29,10 @@
 </script>
 
 <script type="text/x-red" data-help-name="dnr-daemon">
-    <p>This node communicate with DNR Operator, 
-        it allows this device to be part of a device pool that is 
+    <p>This node communicates with DNR Operator, 
+        it allows this local Node-RED to be part of a Node-RED cluster that is 
         managed by the DNR Operator.</p>
+    <b>Be advised: only one instance of this node should be present in all of the flows</b>
 </script>
 <script type="text/x-red" data-help-name="nodered-credentials">
     <p>node red credentials</p>
@@ -166,7 +167,7 @@
         operatorUrl: {type:"text",required:true},
         operatorToken: {type:"operator-credentials", required:false}
       },
-      color:"#d8bfd8",
+      color:"#e5b3c2",
       inputs:0,
       outputs:0,
       label: function() {

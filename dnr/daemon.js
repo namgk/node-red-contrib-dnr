@@ -22,26 +22,25 @@ var ctx = require("./context")
 var utils = require('./utils')
 
 var dnrInterface = require('dnr-interface')
-var TOPIC_DNR_HB = dnrInterface.TOPIC_DNR_HB
-var TOPIC_REGISTER = dnrInterface.TOPIC_REGISTER
-var TOPIC_REGISTER_ACK = dnrInterface.TOPIC_REGISTER_ACK
-var TOPIC_REGISTER_REQ = 'register_req'
-var TOPIC_DNR_SYN_REQ = dnrInterface.TOPIC_DNR_SYN_REQ
-var TOPIC_DNR_SYN_RES = dnrInterface.TOPIC_DNR_SYN_RES
-var TOPIC_DNR_SYN_RESS = dnrInterface.TOPIC_DNR_SYN_RESS
-var TOPIC_FLOW_DEPLOYED = dnrInterface.TOPIC_FLOW_DEPLOYED
+const TOPIC_DNR_HB = dnrInterface.TOPIC_DNR_HB
+const TOPIC_REGISTER = dnrInterface.TOPIC_REGISTER
+const TOPIC_REGISTER_ACK = dnrInterface.TOPIC_REGISTER_ACK
+const TOPIC_REGISTER_REQ = 'register_req'
+const TOPIC_DNR_SYN_REQ = dnrInterface.TOPIC_DNR_SYN_REQ
+const TOPIC_DNR_SYN_RES = dnrInterface.TOPIC_DNR_SYN_RES
+const TOPIC_DNR_SYN_RESS = dnrInterface.TOPIC_DNR_SYN_RESS
+const TOPIC_FLOW_DEPLOYED = dnrInterface.TOPIC_FLOW_DEPLOYED
 
-var STATE_CONNECTING = 0
-var STATE_CONNECTED = 1
-var STATE_REGISTERING = 2
-var STATE_REGISTERED = 3
+const STATE_CONNECTING = 0
+const STATE_CONNECTED = 1
+const STATE_REGISTERING = 2
+const STATE_REGISTERED = 3
+const STATE_DISCONNECTING = -1
+const STATE_DISCONNECTED = -2
+const STATE_SERVER_INACTIVE = -3
+const STATE_SERVER_UNREACHABLE = -4
 
-var STATE_DISCONNECTING = -1
-var STATE_DISCONNECTED = -2
-var STATE_SERVER_INACTIVE = -3
-var STATE_SERVER_UNREACHABLE = -4
-
-var OPERATOR_HEARTBEAT = 5000
+const OPERATOR_HEARTBEAT = 5000
 const OPERATOR_INACTIVE = 15000*3
 
 function getListenPath(settings) {
@@ -69,16 +68,14 @@ module.exports = function(RED) {
     var reconnectAttempts = 0
     var active = true
     var ws = null
-    var wsAlive = false
-    var registered = false
 
     var localNR = RED.nodes.getNode(n.nodered);
     var operatorUrl = n.operatorUrl
     var context = new ctx.Context()
     context.setLocalNR(localNR)
-    // var operatorToken = RED.nodes.getNode(n.operatorToken) // not used
+    // var operatorToken = RED.nodes.getNode(n.operatorToken) // not used yet
 
-    this.log('DNR Operator: ' + operatorUrl)
+    this.log('DNR Cluster: ' + operatorUrl)
 
     var flowsApi = null
     var auth = new Auth(
@@ -102,12 +99,6 @@ module.exports = function(RED) {
     this.setWs = function(w){
       ws = w
     }
-    this.isWsAlive = function(){
-      return wsAlive
-    }
-    this.setWsAlive = function(a){
-      wsAlive = a
-    }
     this.getContext = function(){
       return context
     }
@@ -128,12 +119,6 @@ module.exports = function(RED) {
     }
     this.getLocalNR = function(){
       return localNR
-    }
-    this.isRegistered = function(){
-      return registered
-    }
-    this.setRegistered = function(r){
-      registered = r
     }
 
     let that = this
@@ -157,16 +142,13 @@ module.exports = function(RED) {
       localNR.localNodeTypes = localNodeTypes
 
       that.connect()
-      that.heartbeatTicker = setInterval((function(self){
-        return function(){
-          self.heartbeat.call(self)
-        }
-      })(that), OPERATOR_HEARTBEAT)
+      that.heartbeatTicker = setInterval(function(){
+        that.heartbeat.call(that)
+      }, OPERATOR_HEARTBEAT)
     })
     .catch(e=>{
       throw 'cannot authenticate with local Node RED ' + e
     })
-
   }
 
   DnrDaemonNode.prototype.heartbeat = function() {
@@ -192,23 +174,51 @@ module.exports = function(RED) {
 
       this.getLocalNR().localNodeTypes = localNodeTypes
     }.bind(this))
-    .catch(e=>this.error(JSON.stringify(e)))
+    .catch(this.error)
     
     // send hb to server
-    this.log('agent state - ' + this.state)
-
     if (this.state == STATE_REGISTERED){
       this.getWs().send(JSON.stringify({
         topic:TOPIC_DNR_HB, 
         deviceId: this.getLocalNR().deviceId,
         context: this.getContext().query(),
         dnrSyncReqs: this.dnrSyncReqs
-      }))
+      }), function(e){
+        if (e) console.log(e)
+      })
 
       if (this.lastServerHb && Date.now() - this.lastServerHb >= OPERATOR_INACTIVE){
-        this.state = STATE_SERVER_INACTIVE
+        this.stateUpdate(STATE_SERVER_INACTIVE)
         this.reconnect()
       }
+    }
+  }
+
+  DnrDaemonNode.prototype.stateUpdate = function(state) {
+    this.state = state
+    this.log('state: ' + state)
+    switch (state){
+      case STATE_CONNECTING:
+        this.status({fill:"yellow",shape:"dot",text:"DNR Connecting"});
+        break
+      case STATE_CONNECTED:
+        this.status({fill:"blue",shape:"dot",text:"DNR Connected"});
+        break
+      case STATE_REGISTERING:
+        this.status({fill:"blue",shape:"dot",text:"DNR Registering"});
+        break
+      case STATE_REGISTERED:
+        this.status({fill:"green",shape:"dot",text:"DNR Registered to: " + this.getOperatorUrl()});
+        break
+      case STATE_DISCONNECTED:
+        this.status({fill:"red",shape:"dot",text:"DNR Disconnected"});
+        break
+      case STATE_SERVER_INACTIVE:
+        this.status({fill:"red",shape:"dot",text:"DNR Unresponsive"});
+        break
+      case STATE_SERVER_UNREACHABLE:
+        this.status({fill:"red",shape:"dot",text:"DNR Unreachable"});
+        break
     }
   }
 
@@ -246,9 +256,11 @@ module.exports = function(RED) {
     this.getWs().send(JSON.stringify({
       'topic':TOPIC_REGISTER,
       'deviceName' : this.getLocalNR().deviceName
-    }))
+    }), function(e){
+      if (e) console.log(e)
+    })
 
-    this.state = STATE_REGISTERING
+    this.stateUpdate(STATE_REGISTERING)
   }
 
   DnrDaemonNode.prototype.connect = function() {
@@ -259,12 +271,11 @@ module.exports = function(RED) {
     this.setWs(new WebSocket(path.replace('http://', 'ws://').replace('https://', 'wss://')))
 
     var ws = this.getWs()
-    this.log('connecting')
     let node = this
     ws.on('open', function() {
+      node.lastServerHb = Date.now()
       node.setAttempt(0)
-      node.setWsAlive(true)
-      node.state = STATE_CONNECTED
+      node.stateUpdate(STATE_CONNECTED)
       node.register.call(node)
     })
 
@@ -275,17 +286,15 @@ module.exports = function(RED) {
 
       node.lastServerHb = Date.now()
       try {
-        // node.log(msg)
         msg = JSON.parse(msg)
 
         if (msg.topic === TOPIC_REGISTER_ACK){
           node.getLocalNR().deviceId = msg.id
-          node.setRegistered(true)
-          node.state = STATE_REGISTERED
+          node.stateUpdate(STATE_REGISTERED)
         }
 
         if (msg.topic === TOPIC_REGISTER_REQ){
-          node.state = STATE_CONNECTED
+          node.stateUpdate(STATE_CONNECTED)
           node.register.call(node)
         }
 
@@ -397,8 +406,8 @@ module.exports = function(RED) {
       if (!node.getWs() || node.getWs().readyState === 1){
         return
       }
-      node.log('onclose ' + e + ' r: ' + r + ', readyState: ' + ws.readyState + ', node ws: ' + node.getWs().readyState)
-      node.state = STATE_SERVER_UNREACHABLE
+      node.log('connection closed, error: ' + e + ' reason: ' + r)
+      node.stateUpdate(STATE_SERVER_UNREACHABLE)
       node.reconnect()
     })
 
@@ -406,28 +415,10 @@ module.exports = function(RED) {
       if (!node.getWs() || node.getWs().readyState === 1){
         return
       }
-      node.log('error ' + e)
-      node.state = STATE_SERVER_UNREACHABLE
+      node.log('connection error: ' + e)
+      node.stateUpdate(STATE_SERVER_UNREACHABLE)
       node.reconnect()
     })
-
-    // function noConnection(closed) {
-    //   node.setWsAlive(false)
-    //   node.setRegistered(false)
-
-    //   if (!node.isActive()){
-    //     return
-    //   }
-    //   if (!closed){
-    //     node.getWs().close()
-    //     node.state = STATE_DISCONNECTING
-    //     return
-    //   }
-
-    //   node.setAttempt(node.getAttempt()+1);
-    //   node.log('reconnecting...')
-    //   setTimeout(()=>node.connect.call(node),node.getAttempt() < 10 ? 2000 : 60000);
-    // }
   }
 
   DnrDaemonNode.prototype.reconnect = function() {
@@ -439,20 +430,19 @@ module.exports = function(RED) {
       return
     }
     if (this.getWs()){
-      this.log('closing the old ws')
       this.getWs().close()
       this.setWs(null)
     }
 
     this.setAttempt(this.getAttempt()+1);
     let node = this
-    node.log('scheduling reconnection...')
+    node.log('scheduling reconnection')
     if (node.reconnectTimer){
       clearTimeout(node.reconnectTimer)
     }
     node.reconnectTimer = setTimeout(function(){
       node.connect.call(node)
-      node.state = STATE_CONNECTING
+      node.stateUpdate(STATE_CONNECTING)
     },this.getAttempt() < 10 ? 2000 : 60000);
   }
 
