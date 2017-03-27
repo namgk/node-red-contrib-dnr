@@ -131,16 +131,7 @@ module.exports = function(RED) {
       return flowsApi.getNodes()
     })
     .then((nodes)=>{
-      nodes = JSON.parse(nodes)
-
-      let localNodeTypes = []
-      for (let n of nodes){
-        let nTypes = n.types
-        localNodeTypes = localNodeTypes.concat(n.types)
-      }
-
-      localNR.localNodeTypes = localNodeTypes
-
+      that.updateLocalNodeTypes(nodes)
       that.connect()
       that.heartbeatTicker = setInterval(function(){
         that.heartbeat.call(that)
@@ -149,6 +140,21 @@ module.exports = function(RED) {
     .catch(e=>{
       throw 'cannot authenticate with local Node RED ' + e
     })
+  }
+
+  DnrDaemonNode.prototype.updateLocalNodeTypes = function(nodes){
+    nodes = JSON.parse(nodes)
+
+    let localNodeTypes = []
+    for (let n of nodes){
+      if (n.err){
+        continue
+      }
+      let nTypes = n.types
+      localNodeTypes = localNodeTypes.concat(n.types)
+    }
+
+    this.getLocalNR().localNodeTypes = localNodeTypes
   }
 
   DnrDaemonNode.prototype.heartbeat = function() {
@@ -164,15 +170,7 @@ module.exports = function(RED) {
     // update the list of installed node types
     this.getFlowApi().getNodes()
     .then(function(nodes){
-      nodes = JSON.parse(nodes)
-
-      let localNodeTypes = []
-      for (let n of nodes){
-        let nTypes = n.types
-        localNodeTypes = localNodeTypes.concat(n.types)
-      }
-
-      this.getLocalNR().localNodeTypes = localNodeTypes
+      this.updateLocalNodeTypes(nodes)
     }.bind(this))
     .catch(this.error)
     
