@@ -324,6 +324,10 @@ module.exports = function(RED) {
             localGlobalFlow = JSON.parse(localGlobalFlow)
             let oldLen = localGlobalFlow.configs.length
 
+            if (!globalFlow.configs){
+              return
+            }
+
             for (let gc of globalFlow.configs){
               let exist = false
               for (let c of localGlobalFlow.configs){
