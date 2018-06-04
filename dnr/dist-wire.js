@@ -125,7 +125,7 @@ module.exports = function(RED) {
       var aNode = this.flow.nodes[this.nodeIndexes[dnrNode.input.split('_')[0]]]
 
       // need to decide how this dnr node should behave
-      var state = this.context.reason(aNode, cNode)
+      var state = this.context.reason(aNode, cNode, dnrNode.linkType)
 
       if (dnrNode.state === state){
         continue
@@ -156,13 +156,29 @@ module.exports = function(RED) {
                         /|
                        /
           aNode ______/         aNode
+
+        5.COPY_FETCH_FORWARD state:
+         
+              external               
+                    \                
+                     \               
+          aNode ______\______\  cNode
+
+        6.RECEIVE_REDIRECT_COPY state:
+  
+                        _ external
+                        /|
+                       /
+          aNode ______/_______\  aNode
       */
 
       switch (state){
+        case ctxConstant.COPY_FETCH_FORWARD:
         case ctxConstant.FETCH_FORWARD:
           this.nodesToContribute[cNode.id] = 1
           delete this.nodesToContribute[aNode.id]
           break;
+        case ctxConstant.RECEIVE_REDIRECT_COPY:
         case ctxConstant.RECEIVE_REDIRECT:
           this.nodesToContribute[aNode.id] = 1
           delete this.nodesToContribute[cNode.id]
@@ -196,11 +212,11 @@ module.exports = function(RED) {
       //
       // in short: if inactive node is on the 1 side, it needs to ask coordinator
       //           if inactive node is on the N side, it uses itself
-      if (dnrNode.linkType === 'N1' && state === ctxConstant.FETCH_FORWARD){
+      if (dnrNode.linkType === 'N1' && (state === ctxConstant.FETCH_FORWARD || state === ctxConstant.COPY_FETCH_FORWARD)){
         dnrNode.resubscribe('to_' + this.daemon.getLocalNR().deviceId + '_'  + k)
       }
 
-      if (dnrNode.linkType === '1N' && state === ctxConstant.RECEIVE_REDIRECT){
+      if (dnrNode.linkType === '1N' && (state === ctxConstant.RECEIVE_REDIRECT || state === ctxConstant.RECEIVE_REDIRECT_COPY)){
         dnrNode.publishTopic = 'from_' + this.daemon.getLocalNR().deviceId + '_' + k
       }
 

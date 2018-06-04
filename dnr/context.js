@@ -144,19 +144,36 @@ Context.prototype.satisfying = function(constraints) {
     aNode       \______\  cNode
                        / 
 
+  COPY_FETCH_FORWARD state:
+ 
+        external               
+              \                
+               \               
+    aNode ______\______\  cNode
+
   RECEIVE_REDIRECT state:
   
                   _ external
                   /|
                  /
     aNode ______/         aNode
+
+  RECEIVE_REDIRECT_COPY state:
+  
+                  _ external
+                  /|
+                 /
+    aNode ______/_______\  aNode
 */
 Context.NORMAL = 1
 Context.DROP = 2
 Context.FETCH_FORWARD = 3
 Context.RECEIVE_REDIRECT = 4
+Context.COPY_FETCH_FORWARD = 5
+Context.RECEIVE_REDIRECT_COPY = 6
 
-Context.prototype.reason = function(aNode, cNode) {
+
+Context.prototype.reason = function(aNode, cNode, linkType) {
   if (!utils.hasConstraints(aNode)){
     // should be receiving from aNode
     // decide if it should drop or send
@@ -164,7 +181,13 @@ Context.prototype.reason = function(aNode, cNode) {
     if (!this.satisfying(cNode.constraints)){
       return Context.DROP
     } else {
-      return Context.NORMAL
+      if (linkType === '1N'){
+        return Context.RECEIVE_REDIRECT_COPY
+      } else if (linkType === 'N1'){
+        return Context.COPY_FETCH_FORWARD
+      } else {
+        return Context.NORMAL
+      }
     }
   }
 
@@ -173,7 +196,13 @@ Context.prototype.reason = function(aNode, cNode) {
     // decide if it should send or redirect to external node
     if (!utils.hasConstraints(cNode) || 
         this.satisfying(cNode.constraints)){
-      return Context.NORMAL
+      if (linkType === '1N'){
+        return Context.RECEIVE_REDIRECT_COPY
+      } else if (linkType === 'N1'){
+        return Context.COPY_FETCH_FORWARD
+      } else {
+        return Context.NORMAL
+      }
     } else {
       return Context.RECEIVE_REDIRECT
     }
