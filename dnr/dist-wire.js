@@ -300,8 +300,15 @@ module.exports = function(RED) {
 
   DnrGatewayNode.prototype.dispatch = function(dnrNode, msg) {
     switch (dnrNode.state) {
+      case ctxConstant.COPY_FETCH_FORWARD:
       case ctxConstant.NORMAL:
         dnrNode.send(msg)
+        break;
+      case ctxConstant.RECEIVE_REDIRECT_COPY:
+        dnrNode.send(msg)
+        if (dnrNode.publishTopic){
+          this.broker.publish(dnrNode, dnrNode.publishTopic, JSON.stringify(msg))
+        }
         break;
       case ctxConstant.RECEIVE_REDIRECT:
         if (dnrNode.publishTopic){
