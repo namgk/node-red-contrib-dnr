@@ -58,7 +58,7 @@ module.exports = function(RED) {
       case ctxConstant.FETCH_FORWARD:
         this.status({fill:"blue",shape:"dot",text:"FF \\_ " + this.subscribeTopic});
         break;
-      case ctxConstant.RECEIVE_REDIRECT:
+      case ctxConstant.RECEIVE_REDIRECT_COPY:
         this.status({fill:"yellow",shape:"dot",text:"RRC _/_ " + this.publishTopic});
         break;
       case ctxConstant.RECEIVE_REDIRECT:
