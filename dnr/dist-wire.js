@@ -72,7 +72,7 @@ module.exports = function(RED) {
         break;
     }
 
-    if (state !== ctxConstant.FETCH_FORWARD){
+    if (state !== ctxConstant.FETCH_FORWARD || state !== ctxConstant.COPY_FETCH_FORWARD){
       this.gateway.broker.unsubscribe(this.id)
     }
   }
