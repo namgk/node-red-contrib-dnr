@@ -52,11 +52,17 @@ module.exports = function(RED) {
   DnrNode.prototype.stateUpdate = function(state) {
     this.state = state
     switch (state) {
+      case ctxConstant.COPY_FETCH_FORWARD:
+        this.status({fill:"blue",shape:"dot",text:"CFF _\\_ " + this.subscribeTopic});
+        break;
       case ctxConstant.FETCH_FORWARD:
-        this.status({fill:"blue",shape:"dot",text:"FF >- " + this.subscribeTopic});
+        this.status({fill:"blue",shape:"dot",text:"FF \\_ " + this.subscribeTopic});
         break;
       case ctxConstant.RECEIVE_REDIRECT:
-        this.status({fill:"yellow",shape:"dot",text:"RR -> " + this.publishTopic});
+        this.status({fill:"yellow",shape:"dot",text:"RRC _/_ " + this.publishTopic});
+        break;
+      case ctxConstant.RECEIVE_REDIRECT:
+        this.status({fill:"yellow",shape:"dot",text:"RR _/ " + this.publishTopic});
         break;
       case ctxConstant.NORMAL:
         this.status({});
