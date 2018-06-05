@@ -73,7 +73,6 @@ module.exports = function(RED) {
     }
 
     if (state !== ctxConstant.FETCH_FORWARD && state !== ctxConstant.COPY_FETCH_FORWARD){
-      console.log('debugging: ' + state)
       this.gateway.broker.unsubscribe(this.id)
     }
   }
