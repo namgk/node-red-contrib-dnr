@@ -221,13 +221,15 @@ module.exports = function(RED) {
   }
 
   DnrDaemonNode.prototype.processUnknownNodes = function(activeFlow) {
-    for (let n of activeFlow.nodes){
-      if (!this.getLocalNR().localNodeTypes.includes(n.type)){
-        this.log('adding placeholder node for missing type: ' + n.type)
-        n.replaceFor = n.type
-        n.type = 'dnr-placeholder'
-        n.outputs = n.wires.length
-        n.constraints = {'no-run':{id: 'no-run', cores:999999}}
+    if (activeFlow.nodes){
+      for (let n of activeFlow.nodes){
+        if (!this.getLocalNR().localNodeTypes.includes(n.type)){
+          this.log('adding placeholder node for missing type: ' + n.type)
+          n.replaceFor = n.type
+          n.type = 'dnr-placeholder'
+          n.outputs = n.wires.length
+          n.constraints = {'no-run':{id: 'no-run', cores:999999}}
+        }
       }
     }
 
@@ -298,10 +300,11 @@ module.exports = function(RED) {
 
         if (msg.topic === TOPIC_FLOW_DEPLOYED){
           let activeFlow = msg.data.activeFlow
-          let masterFlows = msg.data.allFlows
-          let globalFlow = msg.data.globalFlow
+          let masterFlows = msg.data.allFlows // all flow id, eg ['flow1.id','flow2.id']
+          let globalFlow = msg.data.globalFlow // global config
 
           node.processUnknownNodes(activeFlow)
+          node.processUnknownNodes(globalFlow)
 
           let dnrizedFlow = Dnr.dnrize(activeFlow)
           // hook to daemon from each dnr gateway
