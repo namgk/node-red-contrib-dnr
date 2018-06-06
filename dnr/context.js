@@ -25,7 +25,7 @@ function Context(){
   this.deviceId = null 
   this.deviceName = null 
   this.cores = os.cpus().length
-  this.freeMem = os.freemem()/1000000
+  this.freeMem = os.freemem()
 
   this.timer = setInterval((function(context){
     return function(){
@@ -55,7 +55,7 @@ Context.prototype.snapshot = function() {
   let location = null
   // snapshoting
   this.location = location || this.location
-  this.freeMem = os.freemem()/1000000 // bytes to MB
+  this.freeMem = os.freemem()
 }
 
 Context.prototype.query = function() {
