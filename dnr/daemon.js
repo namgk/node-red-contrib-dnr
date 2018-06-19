@@ -383,13 +383,17 @@ module.exports = function(RED) {
           })
           .then(()=>{
             // Node-RED bug: cannot concurrently delete flows, 
-            // only first one will be deleted
+            // work around: have these executed sequentially
+            var time = 1000
             for (var i = 0; i < toBeDeleted.length; i++){
-              ((flowIdTobeDeleted)=>{
-                node.getFlowApi().uninstallFlow(flowIdTobeDeleted)
-                .then(console.log)
-                .catch(console.log)
-              })(toBeDeleted[i])
+              setTimeout(((flowIdTobeDeleted)=>{
+                return ()=>{
+                  node.getFlowApi().uninstallFlow(flowIdTobeDeleted)
+                  .then(console.log)
+                  .catch(console.log)
+                }
+              })(toBeDeleted[i]), time)
+              time += 1000
             }
           })
           .then(()=>{ 
