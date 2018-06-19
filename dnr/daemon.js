@@ -122,24 +122,27 @@ module.exports = function(RED) {
     }
 
     let that = this
-    auth.probeAuth()
-    .catch(function(e){
-      return auth.auth()
-    })
-    .then(r=>{
-      flowsApi = new FlowsAPI(auth)
-      return flowsApi.getNodes()
-    })
-    .then((nodes)=>{
-      that.updateLocalNodeTypes(nodes)
-      that.connect()
-      that.heartbeatTicker = setInterval(function(){
-        that.heartbeat.call(that)
-      }, OPERATOR_HEARTBEAT)
-    })
-    .catch(e=>{
-      throw 'cannot authenticate with local Node RED ' + e
-    })
+    // making sure runtime is up and running 
+    setTimeout(()=>{
+      auth.probeAuth()
+      .catch(function(e){
+        return auth.auth()
+      })
+      .then(r=>{
+        flowsApi = new FlowsAPI(auth)
+        return flowsApi.getNodes()
+      })
+      .then((nodes)=>{
+        that.updateLocalNodeTypes(nodes)
+        that.connect()
+        that.heartbeatTicker = setInterval(function(){
+          that.heartbeat.call(that)
+        }, OPERATOR_HEARTBEAT)
+      })
+      .catch(e=>{
+        console.log('cannot authenticate with local Node RED ' + e)
+      })
+    }, 2000)
   }
 
   DnrDaemonNode.prototype.updateLocalNodeTypes = function(nodes){
@@ -365,7 +368,7 @@ module.exports = function(RED) {
 
               // sync local flows with master flows
               if (masterFlows.indexOf(actualFlowId) == -1){
-                toBeDeleted.push(node.getFlowApi().uninstallFlow(flows[i].id))
+                toBeDeleted.push(flows[i].id)
               } else if (actualFlowId === activeFlow.id){
                 toBeUpdated = flows[i].id
               }
@@ -379,13 +382,21 @@ module.exports = function(RED) {
             }
           })
           .then(()=>{
-            // Node-RED bug: cannot concurrently delete flows
-            // if (toBeDeleted.length > 0){
-            //   return toBeDeleted.reduce(function(cur, next){
-            //     return cur.then(next)
-            //   })
-            // }
-          }).catch(node.error)
+            // Node-RED bug: cannot concurrently delete flows, 
+            // only first one will be deleted
+            for (var i = 0; i < toBeDeleted.length; i++){
+              ((flowIdTobeDeleted)=>{
+                node.getFlowApi().uninstallFlow(flowIdTobeDeleted)
+                .then(console.log)
+                .catch(console.log)
+              })(toBeDeleted[i])
+            }
+          })
+          .then(()=>{ 
+            // refresh the editor
+            RED.events.emit("runtime-event",{id:"dnr-deployed",payload:"",retain: false})
+          })
+          .catch(node.error)
         }
 
         if (msg.topic === TOPIC_DNR_SYN_RESS){

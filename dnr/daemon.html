@@ -178,6 +178,10 @@
       }
   });
 
+  RED.comms.subscribe("notification/dnr-deployed",function(topic,msg) {
+    location.reload()
+  })
+
 </script>
 
 
