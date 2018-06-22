@@ -54,22 +54,49 @@ function Context(){
   this.deviceName = null 
   this.cores = os.cpus().length
   this.freeMem = os.freemem()
-  this.network = _parseProcNetDev(fs.readFileSync('/proc/net/dev').toString())
+  this.rxLoad = 0
+  this.txLoad = 0
 
   this.timer = setInterval((function(context){
     return function(){
       context.snapshot.call(context)
     }
   })(this), CONTEXT_SNAPSHOT)
+
+  this.networkLoadTimer = setInterval(function(){
+    var nwStatus = _parseProcNetDev(fs.readFileSync('/proc/net/dev').toString())
+    // TODO: only first interface is captured
+    var nwIf = Object.keys(nwStatus)[0]
+    var rx = nwStatus[nwIf].rx
+    var tx = nwStatus[nwIf].tx
+
+    if (!this.rx){
+      this.rxLoad = 0
+    } else {
+      this.rxLoad = (rx - this.rx)/2
+    }
+    this.rx = rx
+
+    if (!this.tx){
+      this.txLoad = 0
+    } else {
+      this.txLoad = (tx - this.tx)/2
+    }
+    this.tx = tx
+  }.bind(this), 2000)
 }
 
 Context.prototype.destroy = function() {
   clearInterval(this.timer)
+  clearInterval(this.networkLoadTimer)
   delete this.deviceId
   delete this.deviceName
   delete this.cores
   delete this.freeMem
-  delete this.network
+  delete this.rx
+  delete this.rxLoad
+  delete this.tx
+  delete this.txLoad
   delete this.location
 }
 
@@ -86,15 +113,14 @@ Context.prototype.snapshot = function() {
   // snapshoting
   this.location = location || this.location
   this.freeMem = os.freemem()
-  this.network = _parseProcNetDev(fs.readFileSync('/proc/net/dev').toString())
-
 }
 
 Context.prototype.query = function() {
   return {
     location: this.location,
     freeMem: this.freeMem,
-    network: this.network,
+    rxLoad: this.rxLoad,
+    txLoad: this.txLoad,
     cores: this.cores
   }
 }
@@ -138,6 +164,16 @@ Context.prototype.satisfying = function(constraints) {
 
       if (cElement === 'memory' && 
           this.freeMem < constraints[cid][cElement]){
+        return false
+      }
+
+      if (cElement === 'rx' && 
+          this.rxLoad < constraints[cid][cElement]){
+        return false
+      }
+
+      if (cElement === 'tx' && 
+          this.txLoad < constraints[cid][cElement]){
         return false
       }
     }
