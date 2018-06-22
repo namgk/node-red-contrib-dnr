@@ -167,13 +167,13 @@ Context.prototype.satisfying = function(constraints) {
         return false
       }
 
-      if (cElement === 'rx' && 
-          this.rxLoad < constraints[cid][cElement]){
+      if (cElement === 'rxload' && 
+          this.rxLoad > constraints[cid][cElement]){
         return false
       }
 
-      if (cElement === 'tx' && 
-          this.txLoad < constraints[cid][cElement]){
+      if (cElement === 'txload' && 
+          this.txLoad > constraints[cid][cElement]){
         return false
       }
     }
