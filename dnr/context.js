@@ -18,14 +18,43 @@
 "use strict";
 var utils = require("./utils")
 var os = require('os')
+var fs = require('fs')
 
 var CONTEXT_SNAPSHOT = 5000
+
+function _parseProcNetDev(text) {
+  let nw = {};
+  let lines = text.split('\n').slice(2);
+  lines.forEach(l => {
+    let cols = l.split(' ').filter(c => {
+      return c;
+    });
+    if (cols.length === 0) {
+      return;
+    }
+    let rx = cols[1];
+    let tx = cols[9];
+    if (rx < 1 || tx < 1) {
+      return;
+    }
+    let name = cols[0].substring(0, cols[0].length - 1);
+    if (name === 'lo') {
+      return;
+    }
+    nw[name] = {
+      rx: parseInt(rx),
+      tx: parseInt(tx)
+    };
+  });
+  return nw;
+}
 
 function Context(){
   this.deviceId = null 
   this.deviceName = null 
   this.cores = os.cpus().length
   this.freeMem = os.freemem()
+  this.network = _parseProcNetDev(fs.readFileSync('/proc/net/dev').toString())
 
   this.timer = setInterval((function(context){
     return function(){
@@ -40,6 +69,7 @@ Context.prototype.destroy = function() {
   delete this.deviceName
   delete this.cores
   delete this.freeMem
+  delete this.network
   delete this.location
 }
 
@@ -56,12 +86,15 @@ Context.prototype.snapshot = function() {
   // snapshoting
   this.location = location || this.location
   this.freeMem = os.freemem()
+  this.network = _parseProcNetDev(fs.readFileSync('/proc/net/dev').toString())
+
 }
 
 Context.prototype.query = function() {
   return {
     location: this.location,
     freeMem: this.freeMem,
+    network: this.network,
     cores: this.cores
   }
 }
