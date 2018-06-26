@@ -128,6 +128,7 @@ Context.prototype.query = function() {
 // "constraints":{"link":{},"In Vancouver, BC":{"id":"In Vancouver, BC","fill":"#25c6a1","text":"In Vancouver, BC"}}
 Context.prototype.satisfying = function(constraints) {
   // AND all constraints together
+  var satisfied = true
   for (var cid in constraints){
     if (cid === 'link'){
       continue
@@ -143,43 +144,43 @@ Context.prototype.satisfying = function(constraints) {
       if (cElement === 'deviceName'){
         if (!this.deviceName ||
             this.deviceName !== constraints[cid][cElement]){
-          return false
+          satisfied &= false
         }
       }
 
       if (cElement === 'cores'){
         if (!this.cores ||
             this.cores < constraints[cid][cElement]){
-          return false
+          satisfied &= false
         }
       }
 
       if (cElement === 'location'){
         if (!this.location){
-          return false
+          satisfied &= false
         }
         let locationConstraint = JSON.parse(constraints[cid][cElement])
-        return utils.geoInclude(this.location, locationConstraint)
+        satisfied &= utils.geoInclude(this.location, locationConstraint)
       }
 
       if (cElement === 'memory' && 
           this.freeMem < constraints[cid][cElement]){
-        return false
+        satisfied &= false
       }
 
       if (cElement === 'rxload' && 
           this.rxLoad > constraints[cid][cElement]){
-        return false
+        satisfied &= false
       }
 
       if (cElement === 'txload' && 
           this.txLoad > constraints[cid][cElement]){
-        return false
+        satisfied &= false
       }
     }
   }
 
-  return true
+  return satisfied
 }
 
 /*
