@@ -64,6 +64,10 @@ function Context(){
   })(this), CONTEXT_SNAPSHOT)
 
   this.networkLoadTimer = setInterval(function(){
+    if (process.platform !== 'linux'){
+      return;
+    }
+    
     var nwStatus = _parseProcNetDev(fs.readFileSync('/proc/net/dev').toString())
     // TODO: only first interface is captured
     var nwIf = Object.keys(nwStatus)[0]
