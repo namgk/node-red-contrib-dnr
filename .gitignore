@@ -1,4 +1,5 @@
 .DS_store
+.idea
 .config.json
 .dist
 .jshintignore

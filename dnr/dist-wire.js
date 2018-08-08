@@ -14,43 +14,43 @@
  * limitations under the License.
  **/
 
-var utils = require("./utils")
-var Broker = require('./broker')
-var request = require("request-promise-native")
-var dnrInterface = require('dnr-interface')
-var ctxConstant = dnrInterface.Context
-var DnrSyncRes = dnrInterface.DnrSyncRes
+var utils = require("./utils");
+var Broker = require('./broker');
+var request = require("request-promise-native");
+var dnrInterface = require('dnr-interface');
+var ctxConstant = dnrInterface.Context;
+var DnrSyncRes = dnrInterface.DnrSyncRes;
 
 module.exports = function(RED) {
   "use strict";
 
   function DnrNode(n){
-    RED.nodes.createNode(this,n)
+    RED.nodes.createNode(this,n);
     var node = this;
 
-    node.gateway = RED.nodes.getNode(n.gateway)
+    node.gateway = RED.nodes.getNode(n.gateway);
     if (!node.gateway){
       throw "No dnr gateway configured for this flow";
     }
 
     // node.input: "sourceId_port"
     node.input = n.input;
-    node.linkType = n.linkType || 'NN'
-    node.state = ctxConstant.NORMAL
+    node.linkType = n.linkType || 'NN';
+    node.state = ctxConstant.NORMAL;
 
     node.on('input', function(msg){
       node.gateway.dispatch(node, msg)
-    })
+    });
 
     node.on('close', function(){
       node.gateway.broker.unsubscribe(node.id)
-    })
+    });
 
     node.gateway.register(node);
   }
 
   DnrNode.prototype.stateUpdate = function(state) {
-    this.state = state
+    this.state = state;
     switch (state) {
       case ctxConstant.COPY_FETCH_FORWARD:
         this.status({fill:"blue",shape:"dot",text:"CFF _\\_ " + this.subscribeTopic});
@@ -75,43 +75,43 @@ module.exports = function(RED) {
     if (state !== ctxConstant.FETCH_FORWARD && state !== ctxConstant.COPY_FETCH_FORWARD){
       this.gateway.broker.unsubscribe(this.id)
     }
-  }
+  };
 
   DnrNode.prototype.resubscribe = function(topic) {
     if (!topic){
       return
     }
 
-    this.subscribeTopic = topic
+    this.subscribeTopic = topic;
     this.gateway.broker.subscribe(this.id, this.subscribeTopic, function(msg){
       this.send(JSON.parse(msg))
     }.bind(this))
-  }
+  };
 
   // one per flow
   function DnrGatewayNode(n) {
     RED.nodes.createNode(this,n);
-    this.config = n.config
-    this.broker = new Broker(this.config)
-    this.flow = this.config.flow
-    this.nodeIndexes = {}
-    this.dnrNodesMap = {} // key: link, value: the dnr node on it
-    this.daemon = RED.nodes.getNode(n.config.daemon)
-    this.daemon.flowGateway[this.flow.id] = this.id
+    this.config = n.config;
+    this.broker = new Broker(this.config);
+    this.flow = this.config.flow;
+    this.nodeIndexes = {};
+    this.dnrNodesMap = {}; // key: link, value: the dnr node on it
+    this.daemon = RED.nodes.getNode(n.config.daemon);
+    this.daemon.flowGateway[this.flow.id] = this.id;
 
-    this.context = this.daemon.getContext()
-    this.flowCoordinator = this.daemon.getOperatorUrl()// TODO: should get this from flow meta-data
-    this.dnrLinksToRequest = {}
-    this.nodesToContribute = {}
+    this.context = this.daemon.getContext();
+    this.flowCoordinator = this.daemon.getOperatorUrl();// TODO: should get this from flow meta-data
+    this.dnrLinksToRequest = {};
+    this.nodesToContribute = {};
 
     for (let i in this.flow.nodes){
-      let node = this.flow.nodes[i]
+      let node = this.flow.nodes[i];
       this.nodeIndexes[node.id] = i
     }
 
     // dnr sync response received from daemon
     this.on('input', function(msg){
-      let response = new DnrSyncRes().fromObj(msg)
+      let response = new DnrSyncRes().fromObj(msg);
       this.processSyncRes(response)
     }.bind(this))
   }
@@ -126,12 +126,12 @@ module.exports = function(RED) {
     // update the state of each dnr node according to device context
     for (let k in this.dnrNodesMap){
       // aNode ------ dnrNode ----- cNode
-      let dnrNode = this.dnrNodesMap[k]
-      let cNode = this.flow.nodes[this.nodeIndexes[dnrNode.wires[0][0]]]
-      var aNode = this.flow.nodes[this.nodeIndexes[dnrNode.input.split('_')[0]]]
+      let dnrNode = this.dnrNodesMap[k];
+      let cNode = this.flow.nodes[this.nodeIndexes[dnrNode.wires[0][0]]];
+      var aNode = this.flow.nodes[this.nodeIndexes[dnrNode.input.split('_')[0]]];
 
       // need to decide how this dnr node should behave
-      var state = this.context.reason(aNode, cNode, dnrNode.linkType)
+      var state = this.context.reason(aNode, cNode, dnrNode.linkType);
 
       if (dnrNode.state === state){
         continue
@@ -181,18 +181,18 @@ module.exports = function(RED) {
       switch (state){
         case ctxConstant.COPY_FETCH_FORWARD:
         case ctxConstant.FETCH_FORWARD:
-          this.nodesToContribute[cNode.id] = 1
-          delete this.nodesToContribute[aNode.id]
+          this.nodesToContribute[cNode.id] = 1;
+          delete this.nodesToContribute[aNode.id];
           break;
         case ctxConstant.RECEIVE_REDIRECT_COPY:
         case ctxConstant.RECEIVE_REDIRECT:
-          this.nodesToContribute[aNode.id] = 1
-          delete this.nodesToContribute[cNode.id]
+          this.nodesToContribute[aNode.id] = 1;
+          delete this.nodesToContribute[cNode.id];
           break;
         default:
-          delete this.nodesToContribute[aNode.id]
-          delete this.nodesToContribute[cNode.id]
-          dnrNode.stateUpdate(state)
+          delete this.nodesToContribute[aNode.id];
+          delete this.nodesToContribute[cNode.id];
+          dnrNode.stateUpdate(state);
           continue
       }
       // update the pub/sub topics according to the state
@@ -239,7 +239,7 @@ module.exports = function(RED) {
     // update with coordinator/requesting topics for dnrlinks
     if (Object.keys(this.dnrLinksToRequest).length === 0 && 
         Object.keys(this.nodesToContribute).length === 0){
-      delete this.daemon.dnrSyncReqs[this.flow.id]
+      delete this.daemon.dnrSyncReqs[this.flow.id];
       return
     }
     this.daemon.dnrSyncReqs[this.flow.id] = new dnrInterface.DnrSyncReq(
@@ -247,7 +247,7 @@ module.exports = function(RED) {
       Object.keys(this.dnrLinksToRequest),
       Object.keys(this.nodesToContribute)
     )
-  }
+  };
 
   /* @param response:
     {
@@ -258,27 +258,27 @@ module.exports = function(RED) {
     }
   */
   DnrGatewayNode.prototype.processSyncRes = function(response) {
-    let dnrLinks = response.dnrLinks
-    let brokers = response.brokers
+    let dnrLinks = response.dnrLinks;
+    let brokers = response.brokers;
     if (brokers.length > 0){
       this.broker.updateEndpoint(brokers[0])// TODO, we have a list of brokers
     } else {
       let path = this.daemon.getOperatorUrl() + 
         (this.daemon.getOperatorUrl().slice(-1) == "/"?"":"/") + 
-        "mqttws"
+        "mqttws";
       this.broker.updateEndpoint(path)
     }
 
     for (let link in dnrLinks){
       // link: <src node Id>_<outport>_<dest node Id>
       // get the DNR node for this link
-      let dnrNode = this.dnrNodesMap[link]
+      let dnrNode = this.dnrNodesMap[link];
       if (!dnrNode){
-        log.warn('receive a dnrlink response that does not exist - ' + link)
+        log.warn('receive a dnrlink response that does not exist - ' + link);
         continue
       }
 
-      let commTopic = dnrLinks[link]
+      let commTopic = dnrLinks[link];
       // update its comm topics
       if (dnrNode.state === ctxConstant.FETCH_FORWARD || dnrNode.state === ctxConstant.COPY_FETCH_FORWARD){
         dnrNode.resubscribe(commTopic)
@@ -286,44 +286,40 @@ module.exports = function(RED) {
         dnrNode.publishTopic = commTopic
       }
 
-      dnrNode.stateUpdate(dnrNode.state)
+      dnrNode.stateUpdate(dnrNode.state);
 
       // remove the pending dnrLink To Request
       delete this.dnrLinksToRequest[link]
     }
-  }
+  };
 
   DnrGatewayNode.prototype.register = function(dnrNode) {
-    let key = dnrNode.input + '_' + dnrNode.wires[0][0]
+    let key = dnrNode.input + '_' + dnrNode.wires[0][0];
     this.dnrNodesMap[key] = dnrNode
-  }
+  };
 
   DnrGatewayNode.prototype.dispatch = function(dnrNode, msg) {
     switch (dnrNode.state) {
       case ctxConstant.COPY_FETCH_FORWARD:
       case ctxConstant.NORMAL:
-        dnrNode.send(msg)
-        break;
-      case ctxConstant.RECEIVE_REDIRECT_COPY:
-        dnrNode.send(msg)
-        if (dnrNode.publishTopic){
-          this.broker.publish(dnrNode, dnrNode.publishTopic, JSON.stringify(msg))
-        }
+        dnrNode.send(msg);
         break;
       case ctxConstant.RECEIVE_REDIRECT:
         if (dnrNode.publishTopic){
           this.broker.publish(dnrNode, dnrNode.publishTopic, JSON.stringify(msg))
         }
+      case ctxConstant.RECEIVE_REDIRECT_COPY:
+        dnrNode.send(msg);
         break;
     }
-  }
+  };
 
   function DnrPlaceholderNode(n){
-    RED.nodes.createNode(this,n)
+    RED.nodes.createNode(this,n);
     this.replaceFor = n.replaceFor
   }
 
   RED.nodes.registerType("dnr-gateway", DnrGatewayNode, {});
   RED.nodes.registerType("dnr-placeholder", DnrPlaceholderNode);
   RED.nodes.registerType("dnr", DnrNode);
-}
+};
