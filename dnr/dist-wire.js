@@ -14,10 +14,9 @@
  * limitations under the License.
  **/
 
-var utils = require("./utils");
 var Broker = require('./broker');
-var request = require("request-promise-native");
 var dnrInterface = require('dnr-interface');
+var {stringify} = require('flatted/cjs');
 var ctxConstant = dnrInterface.Context;
 var DnrSyncRes = dnrInterface.DnrSyncRes;
 
@@ -83,8 +82,19 @@ module.exports = function(RED) {
     }
 
     this.subscribeTopic = topic;
-    this.gateway.broker.subscribe(this.id, this.subscribeTopic, function(msg){
-      this.send(JSON.parse(msg))
+    const deviceId = this.gateway.daemon.getLocalNR().deviceId
+    this.gateway.broker.subscribe(this.id, this.subscribeTopic, function(dnrMsg){
+      // got message from external devices
+      // FETCH_FORWARD, COPY_FETCH_FORWARD
+      const {msg, msgContext} = dnrMsg
+      const msgId = msgContext.msgId
+      // reconstruct msgContext to msg if any
+      const storedMsg = this.gateway.msgContextStore[msgId]
+      if (storedMsg){
+        storedMsg.payload = msg.payload
+      }
+      this.send(storedMsg || msg)
+      delete this.gateway.msgContextStore[msgId]
     }.bind(this))
   };
 
@@ -96,6 +106,7 @@ module.exports = function(RED) {
     this.flow = this.config.flow;
     this.nodeIndexes = {};
     this.dnrNodesMap = {}; // key: link, value: the dnr node on it
+    this.msgContextStore = {};
     this.daemon = RED.nodes.getNode(n.config.daemon);
     this.daemon.flowGateway[this.flow.id] = this.id;
 
@@ -114,6 +125,23 @@ module.exports = function(RED) {
       let response = new DnrSyncRes().fromObj(msg);
       this.processSyncRes(response)
     }.bind(this))
+  }
+
+  DnrGatewayNode.prototype.serialize = function (msg) {
+    try {
+      JSON.stringify(msg)
+    } catch (e) {
+      // circular, not serializable, likely that system pointers are presented
+      this.msgContextStore[msg._msgid] = msg
+    }
+
+    return stringify({
+      msg: msg,
+      msgContext: {
+        device: this.daemon.getLocalNR().deviceId,
+        msgId: msg._msgid
+      }
+    })
   }
 
   // to be triggered by daemon node
@@ -299,18 +327,28 @@ module.exports = function(RED) {
   };
 
   DnrGatewayNode.prototype.dispatch = function(dnrNode, msg) {
-    switch (dnrNode.state) {
-      case ctxConstant.COPY_FETCH_FORWARD:
-      case ctxConstant.NORMAL:
-        dnrNode.send(msg);
-        break;
-      case ctxConstant.RECEIVE_REDIRECT:
-        if (dnrNode.publishTopic){
-          this.broker.publish(dnrNode, dnrNode.publishTopic, JSON.stringify(msg))
-        }
-      case ctxConstant.RECEIVE_REDIRECT_COPY:
-        dnrNode.send(msg);
-        break;
+    if (dnrNode.state === ctxConstant.DROP){
+      return
+    }
+    if (dnrNode.state === ctxConstant.FETCH_FORWARD){
+      console.log('BUG ALERT: dispatching in a FETCH_FORWARD state!!!')
+      return
+    }
+    
+    if (
+      dnrNode.state === ctxConstant.NORMAL ||
+      dnrNode.state === ctxConstant.COPY_FETCH_FORWARD) {
+      dnrNode.send(msg)
+      return
+    }
+
+    if (dnrNode.state === ctxConstant.RECEIVE_REDIRECT_COPY) {
+      dnrNode.send(msg)
+    }
+
+    if (dnrNode.publishTopic) {
+      var serializedMsg = this.serialize(msg)
+      this.broker.publish(dnrNode, dnrNode.publishTopic, serializedMsg)
     }
   };
 

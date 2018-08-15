@@ -1,6 +1,7 @@
 "use strict";
 
 var mqtt = require('mqtt')
+var {parse} = require('flatted/cjs');
 
 function Broker(config){
   var broker = this
@@ -26,7 +27,10 @@ Broker.prototype.connect = function() {
     message = message.toString()
     for (let k in broker.subscription){
       if (broker.subscription[k].topic === topic){
-        broker.subscription[k].cb(message)
+        try {
+          const dnrMsg = parse(message)
+          broker.subscription[k].cb(dnrMsg)
+        } catch (e) {console.log(e)}
       }
     }
   })
