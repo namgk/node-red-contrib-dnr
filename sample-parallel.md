@@ -1,10 +1,14 @@
 ## Running a parallel service using DNR
 
-### Architecture
+### Architecture               
 
-http node --> [some processing at device 1, device 2] --> join --> http response
+   1                          in location x            1                      1
+   +------------+   1-N      +-------------+    N-1    +----------+           +-----------+
+   | http in    | +--------> |  processing | +-------> |  join    | +-------> | http out  |
+   +------------+            +-------------+           +----------+           +-----------+
 
-The processings at devicec 1 and 2 are done in parallel.
+
+Processing node is done in parallel at all devices configured at location x. Results are joined and returned to client at device 1
 
 ### Implement
 
