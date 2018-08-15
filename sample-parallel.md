@@ -2,10 +2,10 @@
 
 ### Architecture               
 
-   1                          in location x            1                      1
-   +------------+   1-N      +-------------+    N-1    +----------+           +-----------+
-   | http in    | +--------> |  processing | +-------> |  join    | +-------> | http out  |
-   +------------+            +-------------+           +----------+           +-----------+
+    1                          in location x            1                      1
+    +------------+   1-N      +-------------+    N-1    +----------+           +-----------+
+    | http in    | +--------> |  processing | +-------> |  join    | +-------> | http out  |
+    +------------+            +-------------+           +----------+           +-----------+
 
 
 Processing node is done in parallel at all devices configured at location x. Results are joined and returned to client at device 1
