@@ -30,6 +30,15 @@ const TOPIC_DNR_SYN_REQ = dnrInterface.TOPIC_DNR_SYN_REQ
 const TOPIC_DNR_SYN_RES = dnrInterface.TOPIC_DNR_SYN_RES
 const TOPIC_DNR_SYN_RESS = dnrInterface.TOPIC_DNR_SYN_RESS
 const TOPIC_FLOW_DEPLOYED = dnrInterface.TOPIC_FLOW_DEPLOYED
+const TOPIC_MODULE_INSTALLING = dnrInterface.TOPIC_MODULE_INSTALLING
+const TOPIC_MODULE_INSTALLED = dnrInterface.TOPIC_MODULE_INSTALLED
+const TOPIC_MODULE_INSTALL_FAILED = dnrInterface.TOPIC_MODULE_INSTALL_FAILED
+const TOPIC_MODULE_DELETING = dnrInterface.TOPIC_MODULE_DELETING
+const TOPIC_MODULE_DELETED = dnrInterface.TOPIC_MODULE_DELETED
+const TOPIC_MODULE_DELETE_FAILED = dnrInterface.TOPIC_MODULE_DELETE_FAILED
+const TOPIC_MODULE_UPDATING = dnrInterface.TOPIC_MODULE_UPDATING
+const TOPIC_MODULE_UPDATED = dnrInterface.TOPIC_MODULE_UPDATED
+const TOPIC_MODULE_UPDATE_FAILED = dnrInterface.TOPIC_MODULE_UPDATE_FAILED
 
 const STATE_CONNECTING = 0
 const STATE_CONNECTED = 1
@@ -184,9 +193,7 @@ module.exports = function(RED) {
         deviceId: this.getLocalNR().deviceId,
         context: this.getContext().query(),
         dnrSyncReqs: this.dnrSyncReqs
-      }), function(e){
-        if (e) console.log(e)
-      })
+      }), console.log)
 
       if (this.lastServerHb && Date.now() - this.lastServerHb >= OPERATOR_INACTIVE){
         this.stateUpdate(STATE_SERVER_INACTIVE)
@@ -290,6 +297,7 @@ module.exports = function(RED) {
       node.lastServerHb = Date.now()
       try {
         msg = JSON.parse(msg)
+        console.log(msg)
 
         if (msg.topic === TOPIC_REGISTER_ACK){
           node.getLocalNR().deviceId = msg.id
@@ -306,6 +314,7 @@ module.exports = function(RED) {
           let masterFlows = msg.data.allFlows // all flow id, eg ['flow1.id','flow2.id']
           let globalFlow = msg.data.globalFlow // global config
 
+          // TODO: installation of unknown types?
           node.processUnknownNodes(activeFlow)
           node.processUnknownNodes(globalFlow)
 
@@ -416,6 +425,82 @@ module.exports = function(RED) {
 
             delete node.dnrSyncReqs[dnrSyncReq.flowId]
           }
+        }
+
+        if (msg.topic === TOPIC_MODULE_INSTALLED){
+          const installedModule = msg.data.module;
+
+          // install this module locally
+
+          // update master about the process
+          node.getWs().send(JSON.stringify({
+            topic:TOPIC_MODULE_INSTALLING,
+            deviceId: node.getLocalNR().deviceId,
+            module: installedModule
+          }), console.log)
+
+          node.getFlowApi().installNode(installedModule)
+          .then(() => {
+            node.getWs().send(JSON.stringify({
+              topic:TOPIC_MODULE_INSTALLED,
+              deviceId: node.getLocalNR().deviceId,
+              module: installedModule
+            }), console.log)
+          })
+          .catch(e => {
+            // only when the module does not exist, update the master about the failure
+            if (e.statusMessage.indexOf('module_already_loaded') === -1){
+              node.getWs().send(JSON.stringify({
+                topic:TOPIC_MODULE_INSTALL_FAILED,
+                deviceId: node.getLocalNR().deviceId,
+                module: installedModule
+              }), console.log)
+            } else {
+              node.getWs().send(JSON.stringify({
+                topic:TOPIC_MODULE_INSTALLED,
+                deviceId: node.getLocalNR().deviceId,
+                module: installedModule
+              }), console.log)
+            }
+          })
+        }
+
+        if (msg.topic === TOPIC_MODULE_DELETED){
+          const installedModule = msg.data.module;
+
+          // uninstall this module locally
+
+          // update master about the process
+          node.getWs().send(JSON.stringify({
+            topic:TOPIC_MODULE_DELETING,
+            deviceId: node.getLocalNR().deviceId,
+            module: installedModule
+          }), console.log)
+
+          node.getFlowApi().uninstallNode(installedModule)
+          .then(() => {
+            node.getWs().send(JSON.stringify({
+              topic:TOPIC_MODULE_DELETED,
+              deviceId: node.getLocalNR().deviceId,
+              module: installedModule
+            }), console.log)
+          })
+          .catch(e => {
+            // only when the module is still there, update the master about the failure
+            if (e.statusCode !== 404){
+              node.getWs().send(JSON.stringify({
+                topic:TOPIC_MODULE_DELETE_FAILED,
+                deviceId: node.getLocalNR().deviceId,
+                module: installedModule
+              }), console.log)
+            } else {
+              node.getWs().send(JSON.stringify({
+                topic:TOPIC_MODULE_DELETED,
+                deviceId: node.getLocalNR().deviceId,
+                module: installedModule
+              }), console.log)
+            }
+          })
         }
       } catch (err){
         node.error(err)

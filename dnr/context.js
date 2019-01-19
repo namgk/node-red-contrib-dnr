@@ -160,11 +160,12 @@ Context.prototype.satisfying = function(constraints) {
       }
 
       if (cElement === 'location'){
-        if (!this.location){
+        if (!this.location || !this.location.lat || !this.location.lon){
           satisfied &= false
+        } else {
+          let locationConstraint = JSON.parse(constraints[cid][cElement])
+          satisfied &= utils.geoInclude(this.location, locationConstraint)
         }
-        let locationConstraint = JSON.parse(constraints[cid][cElement])
-        satisfied &= utils.geoInclude(this.location, locationConstraint)
       }
 
       if (cElement === 'memory' && 
